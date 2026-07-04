@@ -21,8 +21,8 @@ from ai.utils import fallback_title_from_message, sanitize_title
 
 logger = logging.getLogger("devpilot.ai")
 
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-TITLE_MODEL = os.getenv("OPENAI_TITLE_MODEL", "gpt-4.1-mini")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+TITLE_MODEL = os.getenv("OPENAI_TITLE_MODEL", "gpt-4o-mini")
 
 
 class AIServiceError(Exception):
@@ -57,7 +57,7 @@ class AIService:
         self, history: list[dict], new_message: str
     ) -> AsyncGenerator[str, None]:
         """
-        Streams the assistant's reply token-by-token using the Responses API.
+        Streams the assistant's reply token-by-token using the Chat Completions API.
         Yields plain text deltas. Raises AIServiceError on any failure so the
         router can surface a clean error to the client mid-stream.
         """
@@ -67,21 +67,16 @@ class AIService:
             )
 
         try:
-            stream = await self._client.responses.create(
+            stream = await self._client.chat.completions.create(
                 model=DEFAULT_MODEL,
-                input=self._build_input(history, new_message),
+                messages=self._build_input(history, new_message),
                 stream=True,
             )
-            async for event in stream:
-                event_type = getattr(event, "type", None)
-                if event_type == "response.output_text.delta":
-                    delta = getattr(event, "delta", "")
+            async for chunk in stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta.content
                     if delta:
                         yield delta
-                elif event_type == "response.failed":
-                    raise AIServiceError("The AI provider failed to generate a response.")
-                elif event_type == "error":
-                    raise AIServiceError(getattr(event, "message", "Unknown AI provider error."))
 
         except AuthenticationError as e:
             logger.error("OpenAI authentication error: %s", e)
@@ -109,15 +104,15 @@ class AIService:
             return fallback_title_from_message(first_message)
 
         try:
-            response = await self._client.responses.create(
+            response = await self._client.chat.completions.create(
                 model=TITLE_MODEL,
-                input=[
+                messages=[
                     {"role": "system", "content": "You generate short chat titles only."},
                     {"role": "user", "content": build_title_generation_prompt(first_message)},
                 ],
                 stream=False,
             )
-            raw_title = getattr(response, "output_text", "") or ""
+            raw_title = response.choices[0].message.content or ""
             return sanitize_title(raw_title) if raw_title.strip() else fallback_title_from_message(first_message)
         except Exception as e:  # noqa: BLE001 - title generation must never crash chat creation
             logger.warning("Title generation failed, using fallback: %s", e)

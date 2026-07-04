@@ -43,7 +43,7 @@ def test_health_check():
     """Verify that the health check endpoint returns 200 OK."""
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "devpilot-ai-backend"}
+    assert response.json() == {"status": "ok", "service": "the-ai-software-engineer-backend"}
 
 
 def test_register_and_login():
