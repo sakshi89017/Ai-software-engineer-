@@ -31,7 +31,7 @@ export function MessageList({ messages, isStreaming, streamingContent, onRegener
         <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Sparkles className="h-6 w-6" />
         </div>
-        <h2 className="text-lg font-semibold">Ask DevPilot AI anything</h2>
+        <h2 className="text-lg font-semibold">Ask the AI Software Engineer anything</h2>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           Debugging, architecture, code review, algorithms — start typing below.
         </p>

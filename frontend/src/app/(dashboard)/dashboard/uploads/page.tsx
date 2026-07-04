@@ -23,7 +23,7 @@ export default function UploadsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Uploads</h1>
         <p className="text-muted-foreground">
-          Upload source files, then ask DevPilot AI to explain, debug, or improve them.
+          Upload source files, then ask the AI Software Engineer to explain, debug, or improve them.
         </p>
       </div>
 

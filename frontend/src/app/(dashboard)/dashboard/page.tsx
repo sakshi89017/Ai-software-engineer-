@@ -21,7 +21,7 @@ export default function DashboardPage() {
         <FeatureCard
           icon={MessageSquare}
           title="AI Chat"
-          description="Ask questions, generate code, and get explanations from DevPilot AI."
+          description="Ask questions, generate code, and get explanations from the AI Software Engineer."
           delay={0}
         />
         <FeatureCard

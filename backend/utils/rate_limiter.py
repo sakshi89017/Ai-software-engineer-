@@ -17,7 +17,7 @@ across restarts.
 
 The tradeoff, spelled out for whoever scales this next: this does **not**
 work across multiple backend replicas or processes, since each process
-gets its own counters. If DevPilot AI moves to `--workers > 1` or multiple
+gets its own counters. If The AI Software Engineer moves to `--workers > 1` or multiple
 containers behind a load balancer, this must move to a shared store
 (Redis, or a `rate_limits` table) so all processes see the same counts.
 That is noted as a forward-looking caveat in PROJECT_STATE.md, not a bug

@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // returns tokens on register, so no separate login call is needed.
       tokenStorage.setTokens(data.access_token, data.refresh_token);
       setUser(data.user);
-      toast.success(`Welcome to DevPilot AI, ${data.user.full_name}!`);
+      toast.success(`Welcome to The AI Software Engineer, ${data.user.full_name}!`);
     } catch (error) {
       toast.error(extractApiErrorMessage(error));
       throw error;

@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/context/auth-context";
 
 export const metadata: Metadata = {
-  title: "DevPilot AI",
+  title: "The AI Software Engineer",
   description: "AI-powered software engineering assistant",
 };
 
