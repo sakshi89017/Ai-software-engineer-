@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.next/
+out/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Databases & local storage
+*.db
+backend/devpilot.db
+backend/uploads/storage/
+temp_zip/
+
+# Environment configs (sensitive credentials)
+backend/.env
+frontend/.env.local
+
+# Backups/Checkpoints
+DevPilotAI_Current_State.zip
+task.md
+walkthrough.md
+implementation_plan.md
