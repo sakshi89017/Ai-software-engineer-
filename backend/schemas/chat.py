@@ -21,6 +21,7 @@ class ChatOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     title: str
+    is_pinned: bool
     created_at: datetime
     updated_at: datetime
 
@@ -36,6 +37,7 @@ class ChatListItem(BaseModel):
     """Lightweight shape for the sidebar list — no message bodies."""
     id: uuid.UUID
     title: str
+    is_pinned: bool
     created_at: datetime
     updated_at: datetime
     last_message_preview: Optional[str] = None
@@ -49,7 +51,8 @@ class ChatCreate(BaseModel):
 
 
 class ChatUpdate(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    is_pinned: Optional[bool] = None
 
 
 class SendMessageRequest(BaseModel):

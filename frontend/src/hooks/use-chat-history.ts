@@ -9,31 +9,32 @@ export function useChatHistory() {
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<string>("newest");
 
-  const refresh = useCallback(async (search?: string) => {
+  const refresh = useCallback(async (search?: string, currentSort?: string) => {
     setIsLoading(true);
     try {
-      const data = await chatService.getHistory(search || undefined);
+      const data = await chatService.getHistory(search || undefined, currentSort || sortBy);
       setChats(data);
     } catch {
       toast.error("Could not load chat history.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sortBy]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    refresh(searchQuery, sortBy);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, sortBy]);
 
   // Debounce search input so we don't hit the API on every keystroke.
   useEffect(() => {
     const timeout = setTimeout(() => {
-      refresh(searchQuery);
+      refresh(searchQuery, sortBy);
     }, 300);
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
+  }, [searchQuery, sortBy, refresh]);
 
   const renameChat = useCallback(async (chatId: string, title: string) => {
     try {
@@ -55,13 +56,27 @@ export function useChatHistory() {
     }
   }, []);
 
+  const togglePinChat = useCallback(async (chatId: string, currentPinStatus: boolean) => {
+    try {
+      await chatService.updateChat(chatId, { is_pinned: !currentPinStatus });
+      setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, is_pinned: !currentPinStatus } : c)));
+      toast.success(!currentPinStatus ? "Chat pinned" : "Chat unpinned");
+      refresh(searchQuery, sortBy);
+    } catch {
+      toast.error("Could not toggle pin status.");
+    }
+  }, [refresh, searchQuery, sortBy]);
+
   return {
     chats,
     isLoading,
     searchQuery,
     setSearchQuery,
+    sortBy,
+    setSortBy,
     refresh,
     renameChat,
     deleteChat,
+    togglePinChat,
   };
 }

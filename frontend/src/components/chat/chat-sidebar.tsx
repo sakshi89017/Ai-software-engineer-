@@ -4,7 +4,7 @@ import * as React from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { MessageSquarePlus, MoreHorizontal, Pencil, Search, Trash2, X } from "lucide-react";
+import { MessageSquarePlus, MoreHorizontal, Pencil, Search, Trash2, X, Pin, ArrowUpDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ export function ChatSidebar() {
   const params = useParams<{ id?: string }>();
   const activeChatId = params?.id;
 
-  const { chats, isLoading, searchQuery, setSearchQuery, renameChat, deleteChat } = useChatHistory();
+  const { chats, isLoading, searchQuery, setSearchQuery, sortBy, setSortBy, renameChat, deleteChat, togglePinChat } = useChatHistory();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -53,14 +53,34 @@ export function ChatSidebar() {
           <MessageSquarePlus className="h-4 w-4" />
           New Chat
         </Button>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search chats..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 pl-8 text-sm"
-          />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-sm w-full"
+            />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 border border-border shrink-0" aria-label="Sort chats">
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setSortBy("newest")} className={cn(sortBy === "newest" && "font-bold text-primary")}>
+                Newest
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy("oldest")} className={cn(sortBy === "oldest" && "font-bold text-primary")}>
+                Oldest
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy("pinned")} className={cn(sortBy === "pinned" && "font-bold text-primary")}>
+                Pinned
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -107,8 +127,9 @@ export function ChatSidebar() {
                   </div>
                 ) : (
                   <>
-                    <Link href={`/dashboard/chat/${chat.id}`} className="min-w-0 flex-1 truncate">
-                      {chat.title}
+                    <Link href={`/dashboard/chat/${chat.id}`} className="min-w-0 flex-1 truncate flex items-center gap-1.5">
+                      {chat.is_pinned && <Pin className="h-3 w-3 shrink-0 text-primary rotate-45" />}
+                      <span className="truncate">{chat.title}</span>
                     </Link>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -121,14 +142,17 @@ export function ChatSidebar() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => togglePinChat(chat.id, chat.is_pinned)}>
+                          <Pin className="h-3.5 w-3.5 mr-2 rotate-45" /> {chat.is_pinned ? "Unpin" : "Pin"}
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => startRename(chat.id, chat.title)}>
-                          <Pencil /> Rename
+                          <Pencil className="h-3.5 w-3.5 mr-2" /> Rename
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleDelete(chat.id)}
                           className="text-destructive focus:text-destructive"
                         >
-                          <Trash2 /> Delete
+                          <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

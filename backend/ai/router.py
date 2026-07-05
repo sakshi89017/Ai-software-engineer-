@@ -63,13 +63,22 @@ def create_chat(
 @router.get("/history", response_model=list[ChatListItem])
 def get_history(
     search: Optional[str] = Query(default=None, max_length=255),
+    sort: str = Query(default="newest"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     query = db.query(Chat).filter(Chat.user_id == current_user.id)
     if search:
         query = query.filter(Chat.title.ilike(f"%{search}%"))
-    chats = query.order_by(Chat.updated_at.desc()).all()
+
+    if sort == "pinned":
+        query = query.order_by(Chat.is_pinned.desc(), Chat.updated_at.desc())
+    elif sort == "oldest":
+        query = query.order_by(Chat.updated_at.asc())
+    else:  # newest
+        query = query.order_by(Chat.updated_at.desc())
+
+    chats = query.all()
 
     items: list[ChatListItem] = []
     for chat in chats:
@@ -84,6 +93,7 @@ def get_history(
             ChatListItem(
                 id=chat.id,
                 title=chat.title,
+                is_pinned=chat.is_pinned,
                 created_at=chat.created_at,
                 updated_at=chat.updated_at,
                 last_message_preview=preview,
@@ -103,14 +113,17 @@ def get_chat(
 
 
 @router.patch("/{chat_id}", response_model=ChatOut)
-def rename_chat(
+def update_chat(
     chat_id: uuid.UUID,
     payload: ChatUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     chat = _get_owned_chat(db, chat_id, current_user.id)
-    chat.title = payload.title
+    if payload.title is not None:
+        chat.title = payload.title
+    if payload.is_pinned is not None:
+        chat.is_pinned = payload.is_pinned
     db.commit()
     db.refresh(chat)
     return chat

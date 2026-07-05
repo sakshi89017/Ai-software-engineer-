@@ -14,9 +14,12 @@ export const chatService = {
     return data;
   },
 
-  async getHistory(search?: string): Promise<ChatListItem[]> {
+  async getHistory(search?: string, sort?: string): Promise<ChatListItem[]> {
     const { data } = await apiClient.get<ChatListItem[]>("/api/chat/history", {
-      params: search ? { search } : undefined,
+      params: {
+        ...(search ? { search } : {}),
+        ...(sort ? { sort } : {}),
+      },
     });
     return data;
   },
@@ -27,7 +30,11 @@ export const chatService = {
   },
 
   async renameChat(chatId: string, title: string): Promise<Chat> {
-    const { data } = await apiClient.patch<Chat>(`/api/chat/${chatId}`, { title });
+    return this.updateChat(chatId, { title });
+  },
+
+  async updateChat(chatId: string, payload: { title?: string; is_pinned?: boolean }): Promise<Chat> {
+    const { data } = await apiClient.patch<Chat>(`/api/chat/${chatId}`, payload);
     return data;
   },
 

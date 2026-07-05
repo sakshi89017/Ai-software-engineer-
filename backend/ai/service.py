@@ -5,6 +5,7 @@ OpenAI SDK directly — they call this service, so provider-specific quirks
 """
 import os
 import logging
+import asyncio
 from typing import AsyncGenerator, Optional
 
 from openai import (
@@ -66,12 +67,27 @@ class AIService:
                 "The AI service is not configured (missing OPENAI_API_KEY).", 503
             )
 
+        max_retries = 3
+        backoff = 0.5
+        stream = None
+
+        for attempt in range(max_retries):
+            try:
+                stream = await self._client.chat.completions.create(
+                    model=DEFAULT_MODEL,
+                    messages=self._build_input(history, new_message),
+                    stream=True,
+                )
+                break
+            except (APIConnectionError, APITimeoutError) as e:
+                if attempt == max_retries - 1:
+                    logger.error("OpenAI connection/timeout after %d attempts: %s", max_retries, e)
+                    raise
+                logger.warning("OpenAI connection failed, retrying in %fs... (Attempt %d/%d)", backoff, attempt + 1, max_retries)
+                await asyncio.sleep(backoff)
+                backoff *= 2
+
         try:
-            stream = await self._client.chat.completions.create(
-                model=DEFAULT_MODEL,
-                messages=self._build_input(history, new_message),
-                stream=True,
-            )
             async for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
                     delta = chunk.choices[0].delta.content
@@ -103,15 +119,32 @@ class AIService:
         if not self._has_key:
             return fallback_title_from_message(first_message)
 
+        max_retries = 3
+        backoff = 0.5
+        response = None
+
+        for attempt in range(max_retries):
+            try:
+                response = await self._client.chat.completions.create(
+                    model=TITLE_MODEL,
+                    messages=[
+                        {"role": "system", "content": "You generate short chat titles only."},
+                        {"role": "user", "content": build_title_generation_prompt(first_message)},
+                    ],
+                    stream=False,
+                )
+                break
+            except (APIConnectionError, APITimeoutError) as e:
+                if attempt == max_retries - 1:
+                    logger.warning("Title generation failed connection/timeout after max attempts: %s", e)
+                    return fallback_title_from_message(first_message)
+                await asyncio.sleep(backoff)
+                backoff *= 2
+            except Exception as e:
+                logger.warning("Unexpected error during title generation attempt: %s", e)
+                return fallback_title_from_message(first_message)
+
         try:
-            response = await self._client.chat.completions.create(
-                model=TITLE_MODEL,
-                messages=[
-                    {"role": "system", "content": "You generate short chat titles only."},
-                    {"role": "user", "content": build_title_generation_prompt(first_message)},
-                ],
-                stream=False,
-            )
             raw_title = response.choices[0].message.content or ""
             return sanitize_title(raw_title) if raw_title.strip() else fallback_title_from_message(first_message)
         except Exception as e:  # noqa: BLE001 - title generation must never crash chat creation

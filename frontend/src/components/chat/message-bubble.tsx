@@ -3,9 +3,10 @@
 import * as React from "react";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Bot, Check, Copy, RotateCcw, User } from "lucide-react";
+import { Bot, Check, Copy, RotateCcw, User, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownMessage } from "@/components/chat/markdown-message";
+import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/chat";
 
 interface MessageBubbleProps {
@@ -22,6 +23,7 @@ export function MessageBubble({
   canRegenerate,
 }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
+  const [liked, setLiked] = useState<boolean | null>(null);
   const isUser = message.role === "user";
 
   const handleCopy = async () => {
@@ -60,12 +62,30 @@ export function MessageBubble({
 
         {!isUser && (
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleCopy}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 px-2 text-xs gap-1", liked === true && "text-primary bg-primary/5")}
+              onClick={() => setLiked(liked === true ? null : true)}
+            >
+              <ThumbsUp className="h-3 w-3" />
+              Like
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 px-2 text-xs gap-1", liked === false && "text-destructive bg-destructive/5")}
+              onClick={() => setLiked(liked === false ? null : false)}
+            >
+              <ThumbsDown className="h-3 w-3" />
+              Dislike
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleCopy}>
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {copied ? "Copied" : "Copy"}
+              {copied ? "Copied" : "Copy Response"}
             </Button>
             {isLastAssistantMessage && canRegenerate && (
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onRegenerate}>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={onRegenerate}>
                 <RotateCcw className="h-3 w-3" />
                 Regenerate
               </Button>

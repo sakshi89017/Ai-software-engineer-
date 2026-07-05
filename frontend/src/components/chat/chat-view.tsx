@@ -41,6 +41,7 @@ export function ChatView({ chatId, initialAttachedFile = null }: ChatViewProps) 
           isStreaming={isStreaming}
           streamingContent={streamingContent}
           onRegenerate={regenerate}
+          onSelectPrompt={(prompt) => sendMessage(prompt)}
         />
       </div>
       <ChatInput

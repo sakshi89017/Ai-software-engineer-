@@ -11,6 +11,7 @@ export interface Chat {
   id: string;
   user_id: string;
   title: string;
+  is_pinned: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +23,7 @@ export interface ChatWithMessages extends Chat {
 export interface ChatListItem {
   id: string;
   title: string;
+  is_pinned: boolean;
   created_at: string;
   updated_at: string;
   last_message_preview: string | null;

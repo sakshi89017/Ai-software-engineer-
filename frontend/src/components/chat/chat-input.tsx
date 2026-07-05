@@ -20,6 +20,16 @@ interface ChatInputProps {
   onRemoveAttachment?: () => void;
 }
 
+const GENERAL_SUGGESTION_PROMPTS = [
+  { label: "Explain this algorithm", text: "Explain this algorithm step-by-step, including its time and space complexity:\n\n" },
+  { label: "Generate unit tests", text: "Generate comprehensive unit tests for this code, covering edge cases:\n\n" },
+  { label: "Optimize code", text: "Optimize this code for better performance, memory footprint, and readability:\n\n" },
+  { label: "Review my API", text: "Review this API design/endpoint, checking for security vulnerabilities and REST standards:\n\n" },
+  { label: "Debug error", text: "Help me debug this error. Explain why it occurs and how to fix it:\n\n" },
+  { label: "Create database schema", text: "Create a SQL database schema for an application with tables, indexes, and foreign keys for:\n\n" },
+  { label: "Generate React component", text: "Generate a fully styled, accessible, responsive React TypeScript component for:\n\n" },
+];
+
 export function ChatInput({
   onSend,
   onStop,
@@ -93,6 +103,30 @@ export function ChatInput({
                 </button>
               );
             })}
+          </div>
+        )}
+        {!attachedFile && (
+          <div className="mb-2 flex flex-wrap gap-1.5 max-h-[75px] overflow-y-auto pr-1">
+            {GENERAL_SUGGESTION_PROMPTS.map((prompt) => (
+              <button
+                key={prompt.label}
+                type="button"
+                disabled={isStreaming || disabled}
+                onClick={() => {
+                  setValue(prompt.text);
+                  textareaRef.current?.focus();
+                  if (textareaRef.current) {
+                    setTimeout(() => {
+                      textareaRef.current!.style.height = "auto";
+                      textareaRef.current!.style.height = `${Math.min(textareaRef.current!.scrollHeight, 200)}px`;
+                    }, 50);
+                  }
+                }}
+                className="flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              >
+                {prompt.label}
+              </button>
+            ))}
           </div>
         )}
         <div className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 shadow-sm">
