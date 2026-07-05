@@ -2,9 +2,11 @@
 
 import * as React from "react";
 import { useRef, useState } from "react";
-import { FileCode2, Send, Square, X } from "lucide-react";
+import { FileCode2, Send, Square, X, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AI_ACTIONS } from "@/lib/ai-actions";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface AttachedFile {
   id: string;
@@ -18,6 +20,8 @@ interface ChatInputProps {
   disabled?: boolean;
   attachedFile?: AttachedFile | null;
   onRemoveAttachment?: () => void;
+  isVoiceResponseEnabled: boolean;
+  onToggleVoiceResponse: () => void;
 }
 
 const GENERAL_SUGGESTION_PROMPTS = [
@@ -37,9 +41,80 @@ export function ChatInput({
   disabled,
   attachedFile,
   onRemoveAttachment,
+  isVoiceResponseEnabled,
+  onToggleVoiceResponse,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      const win = window as unknown as {
+        SpeechRecognition?: new () => {
+          continuous: boolean;
+          interimResults: boolean;
+          lang: string;
+          onresult: (e: { resultIndex: number; results: { length: number; [i: number]: { [j: number]: { transcript: string } } } }) => void;
+          onerror: () => void;
+          onend: () => void;
+          start: () => void;
+          stop: () => void;
+        };
+        webkitSpeechRecognition?: new () => {
+          continuous: boolean;
+          interimResults: boolean;
+          lang: string;
+          onresult: (e: { resultIndex: number; results: { length: number; [i: number]: { [j: number]: { transcript: string } } } }) => void;
+          onerror: () => void;
+          onend: () => void;
+          start: () => void;
+          stop: () => void;
+        };
+      };
+      const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        toast.error("Web Speech API is not supported in this browser.");
+        return;
+      }
+      try {
+        const rec = new SpeechRecognition();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = "en-US";
+        
+        rec.onresult = (event) => {
+          let text = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            text += event.results[i][0].transcript;
+          }
+          setValue((prev) => {
+            const trimmed = prev.trim();
+            return trimmed ? `${trimmed} ${text}` : text;
+          });
+        };
+        
+        rec.onerror = () => {
+          setIsListening(false);
+        };
+        
+        rec.onend = () => {
+          setIsListening(false);
+        };
+        
+        rec.start();
+        recognitionRef.current = rec;
+        setIsListening(true);
+      } catch (err) {
+        console.error("Speech recognition start failed", err);
+        setIsListening(false);
+      }
+    }
+  };
 
   const handleSend = () => {
     if (!value.trim() || isStreaming || disabled) return;
@@ -144,6 +219,34 @@ export function ChatInput({
             disabled={disabled}
             className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
           />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={toggleListening}
+            className={cn(
+              "h-9 w-9 rounded-xl",
+              isListening ? "text-red-500 bg-red-500/10 animate-pulse hover:text-red-600" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Dictate with Speech-to-Text"
+          >
+            {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          </Button>
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={onToggleVoiceResponse}
+            className={cn(
+              "h-9 w-9 rounded-xl",
+              isVoiceResponseEnabled ? "text-primary bg-primary/10 hover:text-primary/80" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Toggle Voice Read Aloud"
+          >
+            {isVoiceResponseEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </Button>
+
           {isStreaming ? (
             <Button size="icon" variant="destructive" onClick={onStop} aria-label="Stop generating">
               <Square className="h-4 w-4" />

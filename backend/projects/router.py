@@ -1,5 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.config import get_db
@@ -82,6 +83,54 @@ def get_project_file(
     _get_owned_project(db, record.project_id, current_user.id)
 
     return record
+
+
+class TestGenerateRequest(BaseModel):
+    test_type: str  # "unit" | "integration" | "mock_data" | "edge_cases"
+
+class TestGenerateResponse(BaseModel):
+    filename: str
+    test_code: str
+
+@router.post("/projects/files/{file_id}/generate-tests", response_model=TestGenerateResponse)
+def generate_project_file_tests(
+    file_id: uuid.UUID,
+    payload: TestGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from pydantic import BaseModel
+    from projects.test_generator import generate_tests_for_code
+
+    record = db.query(ProjectFile).filter(ProjectFile.id == file_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Access control check through parent project ownership
+    _get_owned_project(db, record.project_id, current_user.id)
+
+    test_code = generate_tests_for_code(record.filename, record.language or "python", record.content, payload.test_type)
+
+    # Determine filename suffix
+    name_parts = record.filename.rsplit(".", 1)
+    base_name = name_parts[0]
+    ext = f".{name_parts[1]}" if len(name_parts) > 1 else ""
+    
+    # Standard testing file naming
+    test_filename = f"test_{base_name}{ext}"
+    if record.language == "go":
+        test_filename = f"{base_name}_test.go"
+    elif record.language in ("javascript", "typescript"):
+        test_filename = f"{base_name}.test{ext}"
+
+    return TestGenerateResponse(
+        filename=test_filename,
+        test_code=test_code
+    )
+
+
+
+
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

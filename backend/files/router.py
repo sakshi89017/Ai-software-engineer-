@@ -16,7 +16,7 @@ from models.file import UploadedFile
 from auth.dependencies import get_current_user
 from utils.rate_limiter import enforce_upload_rate_limit
 from files.service import file_service, FileValidationError
-from schemas.file import UploadedFileOut, UploadedFileWithContent, AnalyzeRequest
+from schemas.file import UploadedFileOut, UploadedFileWithContent, AnalyzeRequest, FileReviewReportOut, FileReviewIssueOut, TestGenerateRequest, TestGenerateResponse
 from ai.prompts import build_analysis_prompt
 from ai.service import ai_service
 
@@ -140,3 +140,155 @@ async def analyze_file(
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{file_id}/review", response_model=FileReviewReportOut)
+def review_uploaded_file(
+    file_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from projects.code_review import run_file_code_review
+
+    record = _get_owned_file(db, file_id, current_user.id)
+    try:
+        content = file_service.read_content(record.stored_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File content is no longer available")
+
+    report, issues = run_file_code_review(record.filename, content)
+    
+    issues_out = []
+    for issue in issues:
+        issues_out.append(FileReviewIssueOut(
+            file_path=issue.file_path,
+            line_number=issue.line_number,
+            category=issue.category,
+            title=issue.title,
+            description=issue.description,
+            severity=issue.severity,
+            recommended_fix=issue.recommended_fix,
+            code_example=issue.code_example
+        ))
+
+    return FileReviewReportOut(
+        quality_score=report.quality_score,
+        security_score=report.security_score,
+        performance_score=report.performance_score,
+        architecture_score=report.architecture_score,
+        summary=report.summary,
+        issues=issues_out
+    )
+
+
+@router.get("/{file_id}/review/export/{format_type}")
+def export_uploaded_file_review(
+    file_id: uuid.UUID,
+    format_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from fastapi import Response
+    from projects.code_review import run_file_code_review, export_markdown_report, export_pdf_report
+
+    record = _get_owned_file(db, file_id, current_user.id)
+    try:
+        content = file_service.read_content(record.stored_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File content is no longer available")
+
+    report, issues = run_file_code_review(record.filename, content)
+    
+    safe_filename = record.filename.replace(".", "_")
+
+    if format_type.lower() == "json":
+        issues_out = []
+        for i in issues:
+            issues_out.append({
+                "file_path": i.file_path,
+                "line_number": i.line_number,
+                "category": i.category,
+                "title": i.title,
+                "description": i.description,
+                "severity": i.severity,
+                "recommended_fix": i.recommended_fix,
+                "code_example": i.code_example
+            })
+        report_data = {
+            "quality_score": report.quality_score,
+            "security_score": report.security_score,
+            "performance_score": report.performance_score,
+            "architecture_score": report.architecture_score,
+            "summary": report.summary,
+            "issues": issues_out
+        }
+        json_content = json.dumps(report_data, default=str, indent=2)
+        return Response(
+            content=json_content,
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=codereview_{safe_filename}.json"}
+        )
+
+    elif format_type.lower() == "markdown":
+        md_content = export_markdown_report(report, issues, record.filename)
+        return Response(
+            content=md_content,
+            media_type="text/markdown",
+            headers={"Content-Disposition": f"attachment; filename=codereview_{safe_filename}.md"}
+        )
+
+    elif format_type.lower() == "pdf":
+        try:
+            pdf_bytes = export_pdf_report(report, issues, record.filename)
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=codereview_{safe_filename}.pdf"}
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid export format. Choose pdf, markdown, or json.")
+
+
+@router.post("/{file_id}/generate-tests", response_model=TestGenerateResponse)
+def generate_uploaded_file_tests(
+    file_id: uuid.UUID,
+    payload: TestGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from projects.test_generator import generate_tests_for_code
+
+    record = _get_owned_file(db, file_id, current_user.id)
+    try:
+        content = file_service.read_content(record.stored_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File content is no longer available")
+
+    # Map language from extension
+    language = record.language
+    if not language and "." in record.filename:
+        language = record.filename.rsplit(".", 1)[-1]
+    if not language:
+        language = "python"
+
+    test_code = generate_tests_for_code(record.filename, language, content, payload.test_type)
+
+    # Determine filename suffix
+    name_parts = record.filename.rsplit(".", 1)
+    base_name = name_parts[0]
+    ext = f".{name_parts[1]}" if len(name_parts) > 1 else ""
+    
+    # Standard testing file naming
+    test_filename = f"test_{base_name}{ext}"
+    if language == "go":
+        test_filename = f"{base_name}_test.go"
+    elif language in ("javascript", "typescript", "js", "ts", "jsx", "tsx"):
+        test_filename = f"{base_name}.test{ext}"
+
+    return TestGenerateResponse(
+        filename=test_filename,
+        test_code=test_code
+    )

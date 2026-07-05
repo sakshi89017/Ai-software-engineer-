@@ -24,3 +24,6 @@ class User(Base):
     chats = relationship("Chat", back_populates="owner", cascade="all, delete-orphan")
     files = relationship("UploadedFile", back_populates="owner", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+    owned_teams = relationship("Team", back_populates="owner", cascade="all, delete-orphan")
+    team_memberships = relationship("TeamMember", back_populates="user", cascade="all, delete-orphan")
+    comments = relationship("ProjectComment", back_populates="user", cascade="all, delete-orphan")

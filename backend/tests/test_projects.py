@@ -58,6 +58,7 @@ def _get_auth_headers(email: str) -> dict:
 @patch("projects.router.import_github_repository_bg")
 def test_project_crud_flow(mock_bg_import):
     """Verify projects and github import crud endpoints."""
+    app.dependency_overrides[get_db] = override_get_db
     headers = _get_auth_headers("projectuser@example.com")
 
     # 1. Trigger Github Import

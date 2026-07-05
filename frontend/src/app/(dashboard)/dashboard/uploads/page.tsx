@@ -26,9 +26,12 @@ import { fileService } from "@/services/file-service";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/utils";
 import { MarkdownMessage } from "@/components/chat/markdown-message";
-import { cn } from "@/lib/utils";
 import { extractApiErrorMessage } from "@/lib/api-client";
+import { useTheme } from "next-themes";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { UploadedFile } from "@/types/file";
+import { TestGeneratorModal } from "@/components/projects/test-generator-modal";
 
 const ANALYSIS_ACTIONS = [
   { id: "explain", label: "Explain Code", icon: BookOpenText },
@@ -43,6 +46,7 @@ const ANALYSIS_ACTIONS = [
 
 export default function UploadsPage() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const { files, isLoading, refresh, deleteFile, SUPPORTED_EXTENSIONS } = useFiles();
 
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
@@ -61,6 +65,7 @@ export default function UploadsPage() {
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedAnalysis, setCopiedAnalysis] = useState(false);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
   const handleFilesSelected = async (selected: File[]) => {
     // Validate file extensions
@@ -156,22 +161,7 @@ export default function UploadsPage() {
     }
   };
 
-  const highlightMatch = (text: string, query: string) => {
-    if (!query) return text;
-    const parts = text.split(new RegExp(`(${query})`, "gi"));
-    return parts.map((part, idx) =>
-      part.toLowerCase() === query.toLowerCase() ? (
-        <mark
-          key={idx}
-          className="bg-yellow-500/30 text-yellow-900 dark:text-yellow-100 px-0.5 rounded border border-yellow-500/40 font-semibold"
-        >
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
-  };
+
 
   const codeLines = previewContent.split("\n");
   const isCurrentlyUploading = uploadingFiles.length > 0;
@@ -296,6 +286,17 @@ export default function UploadsPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-8 gap-1.5 border-primary/20 text-primary hover:bg-primary/5 shrink-0"
+                    onClick={() => setIsTestModalOpen(true)}
+                    disabled={isPreviewLoading || !previewContent}
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                    Generate Tests
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="h-8 gap-1.5 shrink-0"
                     onClick={handleCopyCode}
                     disabled={isPreviewLoading || !previewContent}
@@ -305,35 +306,40 @@ export default function UploadsPage() {
                   </Button>
                 </div>
 
-                <div className="flex-1 overflow-auto rounded-lg border border-border bg-muted/15 font-mono text-sm leading-relaxed flex min-h-0">
+                <div className="flex-1 overflow-auto rounded-lg border border-border bg-muted/15 font-mono text-sm leading-relaxed flex min-h-0 select-text">
                   {isPreviewLoading ? (
                     <div className="flex-1 flex items-center justify-center">
                       <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
                   ) : (
-                    <>
-                      {/* Line Numbers */}
-                      <div className="py-4 select-none bg-muted/40 border-r border-border text-right text-muted-foreground/60 min-w-[3.5rem] pr-3 text-xs leading-6">
-                        {codeLines.map((_, i) => (
-                          <div key={i}>{i + 1}</div>
-                        ))}
-                      </div>
-                      {/* Code Content */}
-                      <div className="py-4 pl-4 pr-6 select-text overflow-x-auto w-full text-foreground/90 text-xs leading-6 whitespace-pre min-w-0">
-                        {codeLines.map((line, i) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              searchQuery && line.toLowerCase().includes(searchQuery.toLowerCase())
-                                ? "bg-yellow-500/10 -mx-4 px-4 border-l-2 border-yellow-500"
-                                : ""
-                            )}
-                          >
-                            {highlightMatch(line, searchQuery) || " "}
-                          </div>
-                        ))}
-                      </div>
-                    </>
+                    <SyntaxHighlighter
+                      language={previewFile.language || previewFile.file_type || "text"}
+                      style={resolvedTheme === "dark" ? oneDark : oneLight}
+                      showLineNumbers
+                      lineNumberStyle={{ minWidth: "2.5rem", paddingRight: "0.75rem", userSelect: "none", color: "rgba(107, 114, 128, 0.6)" }}
+                      customStyle={{
+                        margin: 0,
+                        padding: "1rem",
+                        width: "100%",
+                        background: "transparent",
+                        fontSize: "0.8rem",
+                        lineHeight: "1.5rem"
+                      }}
+                      wrapLines
+                      lineProps={(lineNumber) => {
+                        const lineContent = codeLines[lineNumber - 1] || "";
+                        const isMatched = searchQuery && lineContent.toLowerCase().includes(searchQuery.toLowerCase());
+                        return {
+                          style: {
+                            display: "block",
+                            backgroundColor: isMatched ? "rgba(234, 179, 8, 0.15)" : undefined,
+                            borderLeft: isMatched ? "2px solid rgb(234, 179, 8)" : undefined,
+                          }
+                        };
+                      }}
+                    >
+                      {previewContent}
+                    </SyntaxHighlighter>
                   )}
                 </div>
               </div>
@@ -434,6 +440,17 @@ export default function UploadsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {isTestModalOpen && previewFile && (
+        <TestGeneratorModal
+          isOpen={isTestModalOpen}
+          onClose={() => setIsTestModalOpen(false)}
+          fileId={previewFile.id}
+          filename={previewFile.filename}
+          language={previewFile.language || previewFile.file_type || "text"}
+          sourceType="upload"
+        />
       )}
     </div>
   );

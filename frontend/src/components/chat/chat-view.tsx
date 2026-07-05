@@ -27,18 +27,47 @@ interface ChatViewProps {
   chatId: string | null;
   initialAttachedFile?: { id: string; name: string } | null;
   initialAttachedProject?: { id: string; name: string } | null;
+  initialDebugPrompt?: string | null;
 }
 
 export function ChatView({
   chatId,
   initialAttachedFile = null,
   initialAttachedProject = null,
+  initialDebugPrompt = null,
 }: ChatViewProps) {
   const { messages, isLoadingChat, isStreaming, streamingContent, sendMessage, regenerate, stopGeneration } =
     useChat({ chatId });
 
   const [attachedFile, setAttachedFile] = useState(initialAttachedFile);
   const [attachedProject, setAttachedProject] = useState(initialAttachedProject);
+  const [isVoiceResponseEnabled, setIsVoiceResponseEnabled] = useState(false);
+
+  // Voice feedback speech reader
+  React.useEffect(() => {
+    if (isVoiceResponseEnabled && !isStreaming && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === "assistant" && lastMsg.content) {
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const cleanText = lastMsg.content
+            .replace(/```[\s\S]*?```/g, "[code generated]")
+            .replace(/[*#`_\-]/g, "")
+            .trim();
+          const utterance = new SpeechSynthesisUtterance(cleanText);
+          utterance.lang = "en-US";
+          window.speechSynthesis.speak(utterance);
+        }
+      }
+    }
+  }, [messages, isStreaming, isVoiceResponseEnabled]);
+
+  // Trigger debugging prompt automatic send if landing from Debug Assistant
+  React.useEffect(() => {
+    if (initialDebugPrompt && !chatId && messages.length === 0 && !isStreaming) {
+      sendMessage(initialDebugPrompt);
+    }
+  }, [initialDebugPrompt, chatId, messages.length, isStreaming, sendMessage]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
 
@@ -69,6 +98,9 @@ export function ChatView({
   }, [chatId, messages]);
 
   const handleSend = (content: string) => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     sendMessage(content, attachedFile?.id, attachedProject?.id);
     // Standard file attachments clear on first send, whereas project context
     // persists throughout the conversation session for ongoing repository Q&A.
@@ -151,10 +183,22 @@ export function ChatView({
 
       <ChatInput
         onSend={handleSend}
-        onStop={stopGeneration}
+        onStop={() => {
+          if (typeof window !== "undefined" && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+          }
+          stopGeneration();
+        }}
         isStreaming={isStreaming}
         attachedFile={attachedFile}
         onRemoveAttachment={() => setAttachedFile(null)}
+        isVoiceResponseEnabled={isVoiceResponseEnabled}
+        onToggleVoiceResponse={() => {
+          if (isVoiceResponseEnabled && typeof window !== "undefined" && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+          }
+          setIsVoiceResponseEnabled(!isVoiceResponseEnabled);
+        }}
       />
     </div>
   );

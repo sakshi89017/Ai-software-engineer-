@@ -25,6 +25,15 @@ import { formatBytes } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { extractApiErrorMessage } from "@/lib/api-client";
 import type { Project, ProjectDetail, ProjectFileTreeItem } from "@/types/project";
+import { CodeReviewTab } from "@/components/projects/code-review-tab";
+import { DocumentationTab } from "@/components/projects/documentation-tab";
+import { TestGeneratorModal } from "@/components/projects/test-generator-modal";
+import { ArchitectureTab } from "@/components/projects/architecture-tab";
+import { CommentsTab } from "@/components/projects/comments-tab";
+import { AgentTab } from "@/components/projects/agent-tab";
+import { useTheme } from "next-themes";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -153,6 +162,7 @@ function FileTree({ nodes, onFileSelect, selectedPath }: FileTreeProps) {
 
 export default function ProjectsPage() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [importUrl, setImportUrl] = useState("");
@@ -167,9 +177,12 @@ export default function ProjectsPage() {
   const [activeFileContent, setActiveFileContent] = useState<string>("");
   const [activeFileName, setActiveFileName] = useState<string>("");
   const [activeFilePath, setActiveFilePath] = useState<string>("");
+  const [activeFileLanguage, setActiveFileLanguage] = useState<string>("");
   const [isFileLoading, setIsFileLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
+  const [activeTab, setActiveTab] = useState<"files" | "code_review" | "documentation" | "architecture" | "comments" | "agent">("files");
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
   // Load projects list
   const loadProjects = useCallback(async () => {
@@ -253,10 +266,12 @@ export default function ProjectsPage() {
   const handleSelectProject = async (project: Project) => {
     setSelectedProject(project);
     setIsDetailLoading(true);
+    setActiveTab("files");
     setActiveFileId(null);
     setActiveFileContent("");
     setActiveFileName("");
     setActiveFilePath("");
+    setActiveFileLanguage("");
     setSearchQuery("");
     try {
       const data = await projectService.getDetail(project.id);
@@ -277,6 +292,7 @@ export default function ProjectsPage() {
       setActiveFileContent(fileData.content);
       setActiveFileName(fileData.filename);
       setActiveFilePath(fileData.file_path);
+      setActiveFileLanguage(fileData.language || "text");
     } catch {
       toast.error("Could not fetch file content.");
       setActiveFileId(null);
@@ -320,19 +336,7 @@ export default function ProjectsPage() {
     }
   };
 
-  const highlightMatch = (text: string, query: string) => {
-    if (!query) return text;
-    const parts = text.split(new RegExp(`(${query})`, "gi"));
-    return parts.map((part, idx) =>
-      part.toLowerCase() === query.toLowerCase() ? (
-        <mark key={idx} className="bg-yellow-500/30 text-yellow-900 dark:text-yellow-100 px-0.5 rounded">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
-  };
+
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -571,132 +575,244 @@ export default function ProjectsPage() {
             )}
           </div>
 
-          {/* PROJECT WORKSPACE: SIDEBAR & CODE VIEWER */}
+          {/* Navigation Tabs */}
           {selectedProject.status === "completed" && (
-            <div className="flex h-[60vh] gap-6 rounded-xl border border-border overflow-hidden bg-card">
-              
-              {/* Left Side: Folder Directory Tree */}
-              <div className="w-80 border-r border-border flex flex-col min-h-0 bg-muted/5">
-                <div className="p-4 border-b border-border bg-muted/15 flex items-center justify-between shrink-0">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Repository Files</h3>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-3">
-                  {isDetailLoading ? (
-                    <div className="flex items-center justify-center h-32">
-                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : projectTree.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-8">No files found.</p>
-                  ) : (
-                    <FileTree
-                      nodes={projectTree}
-                      onFileSelect={handleSelectFile}
-                      selectedPath={activeFilePath}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Right Side: Code Viewer */}
-              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-                {activeFileId ? (
-                  <div className="flex flex-1 flex-col overflow-hidden min-h-0">
-                    
-                    {/* Code Header */}
-                    <div className="px-6 py-4 border-b border-border bg-muted/10 flex items-center justify-between shrink-0">
-                      <div>
-                        <h4 className="font-semibold text-sm truncate max-w-lg">{activeFileName}</h4>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{activeFilePath}</p>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {/* Search inside file */}
-                        <div className="relative flex items-center max-w-xs">
-                          <Search className="absolute left-2.5 h-3 w-3 text-muted-foreground" />
-                          <input
-                            type="text"
-                            placeholder="Search code..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-8 pl-8 pr-3 rounded border border-input bg-background text-[11px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          />
-                        </div>
-
-                        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleCopyCode}>
-                          {copiedCode ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                          Copy
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 gap-1 border-primary/20 hover:bg-primary/5 hover:text-primary"
-                          onClick={() => {
-                            router.push(`/dashboard/chat?projectId=${selectedProject.id}&projectName=${encodeURIComponent(`${selectedProject.repo_owner}/${selectedProject.repo_name}`)}`);
-                          }}
-                        >
-                          <GithubIcon className="h-3.5 w-3.5" />
-                          Discuss Repo
-                        </Button>
-
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="h-8 gap-1"
-                          onClick={() => {
-                            router.push(`/dashboard/chat?fileId=${activeFileId}&fileName=${encodeURIComponent(activeFileName)}`);
-                          }}
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          Ask AI
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Code CodeBlock */}
-                    <div className="flex-1 overflow-auto bg-muted/15 font-mono text-sm leading-relaxed flex min-h-0 select-text">
-                      {isFileLoading ? (
-                        <div className="flex-1 flex items-center justify-center">
-                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                      ) : (
-                        <>
-                          <div className="py-4 select-none bg-muted/40 border-r border-border text-right text-muted-foreground/60 min-w-[3.5rem] pr-3 text-xs leading-6">
-                            {codeLines.map((_, i) => (
-                              <div key={i}>{i + 1}</div>
-                            ))}
-                          </div>
-                          <div className="py-4 pl-4 pr-6 overflow-x-auto w-full text-foreground/90 text-xs leading-6 whitespace-pre min-w-0">
-                            {codeLines.map((line, i) => (
-                              <div
-                                key={i}
-                                className={cn(
-                                  searchQuery && line.toLowerCase().includes(searchQuery.toLowerCase())
-                                    ? "bg-yellow-500/10 -mx-4 px-4 border-l-2 border-yellow-500"
-                                    : ""
-                                )}
-                              >
-                                {highlightMatch(line, searchQuery) || " "}
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                  </div>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/60 p-8 text-center">
-                    <FileCode2 className="h-10 w-10 mb-2 stroke-[1.2]" />
-                    <p className="text-sm">Select a file from the repository tree to preview its content.</p>
-                  </div>
+            <div className="flex border-b border-border gap-2 select-none mb-2 shrink-0">
+              <button
+                onClick={() => setActiveTab("files")}
+                className={cn(
+                  "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
+                  activeTab === "files"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
-              </div>
-
+              >
+                📁 Code Files
+              </button>
+              <button
+                onClick={() => setActiveTab("code_review")}
+                className={cn(
+                  "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
+                  activeTab === "code_review"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                🔍 AI Code Review
+              </button>
+              <button
+                onClick={() => setActiveTab("documentation")}
+                className={cn(
+                  "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
+                  activeTab === "documentation"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                📝 AI Documentation
+              </button>
+              <button
+                onClick={() => setActiveTab("architecture")}
+                className={cn(
+                  "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
+                  activeTab === "architecture"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                📐 AI Architecture
+              </button>
+              <button
+                onClick={() => setActiveTab("comments")}
+                className={cn(
+                  "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
+                  activeTab === "comments"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                💬 Discussions
+              </button>
+              <button
+                onClick={() => setActiveTab("agent")}
+                className={cn(
+                  "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
+                  activeTab === "agent"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                🤖 Developer Agent
+              </button>
             </div>
           )}
+
+          {/* PROJECT WORKSPACE: SIDEBAR & CODE VIEWER */}
+          {selectedProject.status === "completed" && (
+            activeTab === "files" ? (
+              <div className="flex h-[60vh] gap-6 rounded-xl border border-border overflow-hidden bg-card">
+                
+                {/* Left Side: Folder Directory Tree */}
+                <div className="w-80 border-r border-border flex flex-col min-h-0 bg-muted/5">
+                  <div className="p-4 border-b border-border bg-muted/15 flex items-center justify-between shrink-0">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Repository Files</h3>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-3">
+                    {isDetailLoading ? (
+                      <div className="flex items-center justify-center h-32">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : projectTree.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">No files found.</p>
+                    ) : (
+                      <FileTree
+                        nodes={projectTree}
+                        onFileSelect={handleSelectFile}
+                        selectedPath={activeFilePath}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Code Viewer */}
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                  {activeFileId ? (
+                    <div className="flex flex-1 flex-col overflow-hidden min-h-0">
+                      
+                      {/* Code Header */}
+                      <div className="px-6 py-4 border-b border-border bg-muted/10 flex items-center justify-between shrink-0">
+                        <div>
+                          <h4 className="font-semibold text-sm truncate max-w-lg">{activeFileName}</h4>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{activeFilePath}</p>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {/* Search inside file */}
+                          <div className="relative flex items-center max-w-xs">
+                            <Search className="absolute left-2.5 h-3 w-3 text-muted-foreground" />
+                            <input
+                              type="text"
+                              placeholder="Search code..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="h-8 pl-8 pr-3 rounded border border-input bg-background text-[11px] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                          </div>
+
+                          <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleCopyCode}>
+                            {copiedCode ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            Copy
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1 border-primary/20 hover:bg-primary/5 hover:text-primary"
+                            onClick={() => {
+                              router.push(`/dashboard/chat?projectId=${selectedProject.id}&projectName=${encodeURIComponent(`${selectedProject.repo_owner}/${selectedProject.repo_name}`)}`);
+                            }}
+                          >
+                            <GithubIcon className="h-3.5 w-3.5" />
+                            Discuss Repo
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1 border-primary/20 text-primary hover:bg-primary/5 shrink-0"
+                            onClick={() => setIsTestModalOpen(true)}
+                          >
+                            <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                            Generate Tests
+                          </Button>
+
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-8 gap-1"
+                            onClick={() => {
+                              router.push(`/dashboard/chat?fileId=${activeFileId}&fileName=${encodeURIComponent(activeFileName)}`);
+                            }}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Ask AI
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Code CodeBlock */}
+                      <div className="flex-1 overflow-auto bg-muted/15 font-mono text-sm leading-relaxed flex min-h-0 select-text">
+                        {isFileLoading ? (
+                          <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        ) : (
+                          <SyntaxHighlighter
+                            language={activeFileLanguage}
+                            style={resolvedTheme === "dark" ? oneDark : oneLight}
+                            showLineNumbers
+                            lineNumberStyle={{ minWidth: "2.5rem", paddingRight: "0.75rem", userSelect: "none", color: "rgba(107, 114, 128, 0.6)" }}
+                            customStyle={{
+                              margin: 0,
+                              padding: "1rem",
+                              width: "100%",
+                              background: "transparent",
+                              fontSize: "0.8rem",
+                              lineHeight: "1.5rem"
+                            }}
+                            wrapLines
+                            lineProps={(lineNumber) => {
+                              const lineContent = codeLines[lineNumber - 1] || "";
+                              const isMatched = searchQuery && lineContent.toLowerCase().includes(searchQuery.toLowerCase());
+                              return {
+                                style: {
+                                  display: "block",
+                                  backgroundColor: isMatched ? "rgba(234, 179, 8, 0.15)" : undefined,
+                                  borderLeft: isMatched ? "2px solid rgb(234, 179, 8)" : undefined,
+                                }
+                              };
+                            }}
+                          >
+                            {activeFileContent}
+                          </SyntaxHighlighter>
+                        )}
+                      </div>
+
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/60 p-8 text-center">
+                      <FileCode2 className="h-10 w-10 mb-2 stroke-[1.2]" />
+                      <p className="text-sm">Select a file from the repository tree to preview its content.</p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            ) : activeTab === "code_review" ? (
+              <CodeReviewTab projectId={selectedProject.id} />
+            ) : activeTab === "documentation" ? (
+              <DocumentationTab projectId={selectedProject.id} />
+            ) : activeTab === "architecture" ? (
+              <ArchitectureTab projectId={selectedProject.id} />
+            ) : activeTab === "comments" ? (
+              <CommentsTab projectId={selectedProject.id} />
+            ) : (
+              <AgentTab projectId={selectedProject.id} />
+            )
+          )}
         </div>
+      )}
+
+      {isTestModalOpen && activeFileId && (
+        <TestGeneratorModal
+          isOpen={isTestModalOpen}
+          onClose={() => setIsTestModalOpen(false)}
+          fileId={activeFileId}
+          filename={activeFileName}
+          language={activeFileLanguage}
+          sourceType="project"
+        />
       )}
     </div>
   );

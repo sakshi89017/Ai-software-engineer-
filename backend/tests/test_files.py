@@ -156,7 +156,31 @@ def test_uploads_api_and_analysis(mock_stream, mock_read, mock_save):
     )
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
-    
+
+    # 4.5. Run AI Code Review
+    response = client.post(f"/api/uploads/{file_id}/review", headers=headers)
+    assert response.status_code == 200
+    review_data = response.json()
+    assert "quality_score" in review_data
+    assert "issues" in review_data
+    assert len(review_data["issues"]) > 0
+
+    # 4.6. Export File Code Review
+    for fmt in ["pdf", "markdown", "json"]:
+        response = client.get(f"/api/uploads/{file_id}/review/export/{fmt}", headers=headers)
+        assert response.status_code == 200
+
+    # 4.7. Generate tests for uploaded file
+    response = client.post(
+        f"/api/uploads/{file_id}/generate-tests",
+        json={"test_type": "unit"},
+        headers=headers
+    )
+    assert response.status_code == 200
+    test_res = response.json()
+    assert "filename" in test_res
+    assert "test_code" in test_res
+
     # 5. Delete file
     response = client.delete(f"/api/uploads/{file_id}", headers=headers)
     assert response.status_code == 204
