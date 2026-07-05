@@ -4,6 +4,8 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   token_count: number;
+  file_id?: string | null;
+  project_id?: string | null;
   created_at: string;
 }
 
@@ -34,6 +36,7 @@ export interface SendMessagePayload {
   content: string;
   regenerate?: boolean;
   file_id?: string | null;
+  project_id?: string | null;
 }
 
 // Discriminated union matching the backend's SSE event payloads exactly.

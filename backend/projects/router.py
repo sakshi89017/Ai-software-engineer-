@@ -93,4 +93,12 @@ def delete_project(
     project = _get_owned_project(db, project_id, current_user.id)
     db.delete(project)
     db.commit()
+
+    # Clean up ChromaDB collection
+    try:
+        from projects.service import chroma_client
+        chroma_client.delete_collection(name=f"project_{project_id}")
+    except Exception:
+        pass
+
     return None

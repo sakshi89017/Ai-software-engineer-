@@ -42,6 +42,7 @@ class ProjectFile(Base):
     size_bytes = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     language = Column(String(100), nullable=True)
+    intelligence_metadata = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="files")

@@ -161,6 +161,149 @@ def _build_file_prompt(db: Session, user_id: uuid.UUID, file_id: uuid.UUID, ques
     )
 
 
+def _build_project_intelligence_prompt(db: Session, project_id: uuid.UUID, user_query: str) -> str:
+    """
+    Retrieves codebase metadata (routes, database models, environment variables,
+    classes, functions, TODO comments) and runs semantic document retrieval via
+    ChromaDB to build a unified context block for Google Gemini.
+    """
+    from models.project import Project, ProjectFile
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return user_query
+
+    files = db.query(ProjectFile).filter(ProjectFile.project_id == project_id).all()
+    lower_query = user_query.lower()
+
+    intel_context = []
+    intel_context.append(f"Project Name: {project.repo_name or 'Repository'}")
+    intel_context.append(f"Owner: {project.repo_owner or 'Unknown'}")
+    intel_context.append(f"Framework: {project.framework or 'Generic'}")
+    intel_context.append(f"Languages: {project.languages or 'Unknown'}")
+
+    # API Routes extraction
+    if any(k in lower_query for k in ["route", "api", "endpoint", "url", "path"]):
+        all_routes = []
+        for f in files:
+            if f.intelligence_metadata:
+                try:
+                    meta = json.loads(f.intelligence_metadata)
+                    for r in meta.get("routes", []):
+                        all_routes.append(f"- `{r}` (defined in `{f.file_path}`)")
+                except Exception:
+                    pass
+        if all_routes:
+            intel_context.append("\n### API Routes defined in project:\n" + "\n".join(all_routes))
+        else:
+            intel_context.append("\nNo routes detected in the repository.")
+
+    # Database Models extraction
+    if any(k in lower_query for k in ["model", "database", "schema", "db", "table"]):
+        all_models = []
+        for f in files:
+            if f.intelligence_metadata:
+                try:
+                    meta = json.loads(f.intelligence_metadata)
+                    for m in meta.get("models", []):
+                        all_models.append(f"- `{m}` (defined in `{f.file_path}`)")
+                except Exception:
+                    pass
+        if all_models:
+            intel_context.append("\n### Database Models defined in project:\n" + "\n".join(all_models))
+        else:
+            intel_context.append("\nNo database models detected in the repository.")
+
+    # Environment Variables extraction
+    if any(k in lower_query for k in ["env", "environment", "key", "config"]):
+        all_envs = []
+        for f in files:
+            if f.intelligence_metadata:
+                try:
+                    meta = json.loads(f.intelligence_metadata)
+                    for e in meta.get("envs", []):
+                        all_envs.append(f"- `{e}` (referenced in `{f.file_path}`)")
+                except Exception:
+                    pass
+        if all_envs:
+            intel_context.append("\n### Environment Variables used in project:\n" + "\n".join(all_envs))
+
+    # TODO comments extraction
+    if "todo" in lower_query:
+        all_todos = []
+        for f in files:
+            if f.intelligence_metadata:
+                try:
+                    meta = json.loads(f.intelligence_metadata)
+                    for t in meta.get("todos", []):
+                        all_todos.append(f"- [ ] {t} (in `{f.file_path}`)")
+                except Exception:
+                    pass
+        if all_todos:
+            intel_context.append("\n### TODO Comments found in project:\n" + "\n".join(all_todos))
+        else:
+            intel_context.append("\nNo TODO comments found in the repository.")
+
+    # Folder Structure extraction
+    if any(k in lower_query for k in ["folder", "structure", "layout", "tree", "files", "hierarchy"]):
+        paths = sorted([f.file_path for f in files])
+        intel_context.append("\n### Codebase Files Tree Layout:\n" + "\n".join(f"- `{p}`" for p in paths[:150]))
+        if len(paths) > 150:
+            intel_context.append(f"\n... and {len(paths) - 150} other files.")
+
+    # Dependency Graph & Imports
+    if any(k in lower_query for k in ["dependency", "dependencies", "import", "graph", "package"]):
+        imports_map = {}
+        for f in files:
+            if f.intelligence_metadata:
+                try:
+                    meta = json.loads(f.intelligence_metadata)
+                    for imp in meta.get("imports", []):
+                        imports_map[f.file_path] = imports_map.get(f.file_path, []) + [imp]
+                except Exception:
+                    pass
+        dep_lines = []
+        for filepath, imps in list(imports_map.items())[:50]:
+            dep_lines.append(f"- `{filepath}` imports: {', '.join(f'`{i}`' for i in imps[:5])}")
+        if dep_lines:
+            intel_context.append("\n### Codebase Dependency Mapping (sample):\n" + "\n".join(dep_lines))
+
+    # Heuristic diagnostics (duplicate code, unused files)
+    if any(k in lower_query for k in ["unused", "duplicate", "redundant", "similarity"]):
+        paths = [f.file_path for f in files]
+        intel_context.append(f"\nHere is a list of project files for diagnostic checks: {', '.join(paths[:120])}")
+
+    # Semantic code query search in ChromaDB
+    try:
+        from projects.service import chroma_client
+        collection = chroma_client.get_collection(name=f"project_{project_id}")
+        query_embeddings = ai_service.generate_embeddings([user_query])
+        if query_embeddings and len(query_embeddings) > 0:
+            results = collection.query(
+                query_embeddings=[query_embeddings[0]],
+                n_results=3
+            )
+            matched_docs = []
+            if results and "documents" in results and results["documents"]:
+                for idx, doc in enumerate(results["documents"][0]):
+                    metadata = results["metadatas"][0][idx] if results["metadatas"] else {}
+                    matched_docs.append(f"--- MATCHING CODE FILE: {metadata.get('file_path', 'unknown')} ---\n{doc[:4000]}")
+            if matched_docs:
+                intel_context.append("\n### Semantically Relevant Code Snippets:\n" + "\n\n".join(matched_docs))
+    except Exception as e:
+        logger.warning("ChromaDB retrieval failed for project %s: %s", project_id, e)
+
+    prompt = (
+        f"You are responding within the context of the repository: **{project.repo_owner}/{project.repo_name}**.\n"
+        f"Use the structural codebase info below to accurately answer the user's request.\n\n"
+        f"--- Codebase Structural Intelligence Context ---\n"
+        + "\n".join(intel_context) +
+        f"\n\nUser Question:\n{user_query}"
+    )
+    return prompt
+
+
+
 @router.post("/message")
 async def send_message(
     payload: SendMessageRequest,
@@ -199,6 +342,7 @@ async def send_message(
     )
 
     new_message_file_id: Optional[uuid.UUID] = None
+    new_message_project_id: Optional[uuid.UUID] = None
 
     if payload.regenerate:
         # Regeneration reuses the last user message and drops the previous
@@ -208,9 +352,10 @@ async def send_message(
         last_assistant = history_rows[-1]
         last_user_row = history_rows[-2] if len(history_rows) >= 2 else None
         user_message_content = last_user_row.content if last_user_row else payload.content
-        # Re-attach whatever file (if any) was originally sent with this user
-        # message, so regenerating doesn't silently lose file context.
+        # Re-attach whatever file or project context was originally sent with this user
+        # message, so regenerating doesn't silently lose context.
         new_message_file_id = last_user_row.file_id if last_user_row else None
+        new_message_project_id = last_user_row.project_id if last_user_row else None
         db.delete(last_assistant)
         db.commit()
         context_history = [{"role": m.role, "content": m.content} for m in history_rows[:-2]]
@@ -220,15 +365,18 @@ async def send_message(
         context_history = [{"role": m.role, "content": m.content} for m in history_rows]
         new_user_content = payload.content
         new_message_file_id = payload.file_id
+        new_message_project_id = payload.project_id
         save_user_message = True
 
-    # If a file is attached, fold its content into the prompt sent to the
-    # model for this turn only. The DB keeps the user's original typed
-    # message clean; the file content is not duplicated into chat history.
+    # Fold attached file context or repository intelligence into user prompt
     ai_prompt_content = new_user_content
     if new_message_file_id:
         ai_prompt_content = _build_file_prompt(
             db, current_user.id, new_message_file_id, new_user_content
+        )
+    elif new_message_project_id:
+        ai_prompt_content = _build_project_intelligence_prompt(
+            db, new_message_project_id, new_user_content
         )
 
     chat_id = chat.id
@@ -240,8 +388,7 @@ async def send_message(
         if is_new_chat:
             yield f"data: {json.dumps({'type': 'chat_created', 'chat_id': str(chat_id)})}\n\n"
 
-        # Persist the user's message before generating a reply so it isn't
-        # lost if the stream fails partway through.
+        # Persist user message with context ids
         if save_user_message:
             user_msg = Message(
                 chat_id=chat_id,
@@ -249,6 +396,7 @@ async def send_message(
                 content=new_user_content,
                 token_count=estimate_token_count(new_user_content),
                 file_id=new_message_file_id,
+                project_id=new_message_project_id,
             )
             db.add(user_msg)
             db.commit()

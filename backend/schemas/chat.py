@@ -11,6 +11,7 @@ class MessageOut(BaseModel):
     content: str
     token_count: int
     file_id: Optional[uuid.UUID] = None
+    project_id: Optional[uuid.UUID] = None
     created_at: datetime
 
     class Config:
@@ -60,3 +61,4 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=16000)
     regenerate: bool = False
     file_id: Optional[uuid.UUID] = None
+    project_id: Optional[uuid.UUID] = None

@@ -8,6 +8,8 @@ export default function NewChatPage() {
   const searchParams = useSearchParams();
   const fileId = searchParams.get("fileId");
   const fileName = searchParams.get("fileName");
+  const projectId = searchParams.get("projectId");
+  const projectName = searchParams.get("projectName");
 
   // key="new" ensures React remounts the view (and useChat's state) if the
   // user navigates back here after an existing chat, rather than reusing
@@ -17,6 +19,7 @@ export default function NewChatPage() {
       key="new"
       chatId={null}
       initialAttachedFile={fileId && fileName ? { id: fileId, name: fileName } : null}
+      initialAttachedProject={projectId && projectName ? { id: projectId, name: projectName } : null}
     />
   );
 }

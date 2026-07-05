@@ -505,6 +505,20 @@ export default function ProjectsPage() {
                   <span className="text-xs font-semibold text-primary">{getStatusLabel(selectedProject.status)}</span>
                 </div>
               )}
+
+              {selectedProject.status === "completed" && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                  onClick={() => {
+                    router.push(`/dashboard/chat?projectId=${selectedProject.id}&projectName=${encodeURIComponent(`${selectedProject.repo_owner}/${selectedProject.repo_name}`)}`);
+                  }}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Discuss Repo with AI
+                </Button>
+              )}
             </div>
 
             {/* Commit and Languages info */}
@@ -612,6 +626,18 @@ export default function ProjectsPage() {
                         <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleCopyCode}>
                           {copiedCode ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                           Copy
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1 border-primary/20 hover:bg-primary/5 hover:text-primary"
+                          onClick={() => {
+                            router.push(`/dashboard/chat?projectId=${selectedProject.id}&projectName=${encodeURIComponent(`${selectedProject.repo_owner}/${selectedProject.repo_name}`)}`);
+                          }}
+                        >
+                          <GithubIcon className="h-3.5 w-3.5" />
+                          Discuss Repo
                         </Button>
 
                         <Button

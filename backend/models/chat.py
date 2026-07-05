@@ -44,6 +44,11 @@ class Message(Base):
         ForeignKey("uploaded_files.id", ondelete="SET NULL"),
         nullable=True,
     )
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     chat = relationship("Chat", back_populates="messages")

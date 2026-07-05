@@ -1,14 +1,104 @@
 import re
+import json
 import uuid
 import subprocess
 import logging
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
+import chromadb
 
 from database.config import SessionLocal
 from models.project import Project, ProjectFile
 from files.service import ALLOWED_EXTENSIONS
+from ai.service import ai_service
+
+logger = logging.getLogger("devpilot.projects")
+chroma_client = chromadb.PersistentClient(path="uploads/chroma_db")
+
+
+def extract_intelligence_metadata(content: str, filename: str) -> dict:
+    """
+    Regex-based scanner to extract code entities (classes, functions, imports,
+    REST routes, database models, environment variables, and TODOs).
+    """
+    metadata = {
+        "classes": [],
+        "functions": [],
+        "imports": [],
+        "routes": [],
+        "models": [],
+        "envs": [],
+        "todos": []
+    }
+
+    # 1. TODO comments
+    for m in re.finditer(r"(?:#|//|/\*)\s*TODO\s*[:\-]?\s*([^\n\*]+)", content, re.IGNORECASE):
+        todo_text = m.group(1).strip()
+        if todo_text:
+            metadata["todos"].append(todo_text)
+
+    # 2. Classes
+    for m in re.finditer(r"\bclass\s+([a-zA-Z0-9_]+)", content):
+        metadata["classes"].append(m.group(1))
+
+    # 3. Database models
+    for m in re.finditer(r"class\s+([a-zA-Z0-9_]+)\s*\(\s*(?:Base|Model|db\.Model)", content):
+        metadata["models"].append(m.group(1))
+    if "@Entity" in content:
+        for m in re.finditer(r"@Entity.*\n.*class\s+([a-zA-Z0-9_]+)", content):
+            metadata["models"].append(m.group(1))
+
+    # 4. Functions
+    # Python def
+    for m in re.finditer(r"def\s+([a-zA-Z0-9_]+)\s*\(", content):
+        metadata["functions"].append(m.group(1))
+    # JS/TS function or arrow definition
+    for m in re.finditer(r"function\s+([a-zA-Z0-9_]+)\s*\(", content):
+        metadata["functions"].append(m.group(1))
+    for m in re.finditer(r"(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:\([^)]*\)|[a-zA-Z0-9_]+)\s*=>", content):
+        metadata["functions"].append(m.group(1))
+    # Go func
+    for m in re.finditer(r"func\s+(?:\([^)]+\)\s*)?([a-zA-Z0-9_]+)\s*\(", content):
+        metadata["functions"].append(m.group(1))
+    # Java/C++ methods fallback
+    if filename.endswith((".java", ".cpp", ".c", ".h")):
+        for m in re.finditer(r"\b([a-zA-Z0-9_]+)\s*\([^)]*\)\s*\{", content):
+            name = m.group(1)
+            if name not in {"if", "for", "while", "switch", "catch", "synchronized"}:
+                metadata["functions"].append(name)
+
+    # 5. Imports
+    for m in re.finditer(r"^\s*(?:import|from)\s+([a-zA-Z0-9_.]+)", content, re.MULTILINE):
+        metadata["imports"].append(m.group(1))
+    for m in re.finditer(r"import\s+.*\s+from\s+['\"]([^'\"]+)['\"]", content):
+        metadata["imports"].append(m.group(1))
+    for m in re.finditer(r"require\(['\"]([^'\"]+)['\"]\)", content):
+        metadata["imports"].append(m.group(1))
+
+    # 6. Routes
+    # Python routes (FastAPI/Flask)
+    for m in re.finditer(r"@\w*(?:app|router)\.(?:get|post|put|delete|patch|route)\s*\(\s*['\"]([^'\"]+)['\"]", content):
+        metadata["routes"].append(m.group(1))
+    # Express routes
+    for m in re.finditer(r"\.(?:get|post|put|delete|patch)\s*\(\s*['\"]([^'\"]+)['\"]", content):
+        route = m.group(1)
+        if route.startswith("/"):
+            metadata["routes"].append(route)
+
+    # 7. Env variables
+    for m in re.finditer(r"getenv\s*\(\s*['\"]([a-zA-Z0-9_]+)['\"]", content):
+        metadata["envs"].append(m.group(1))
+    for m in re.finditer(r"environ\.get\s*\(\s*['\"]([a-zA-Z0-9_]+)['\"]", content):
+        metadata["envs"].append(m.group(1))
+    for m in re.finditer(r"process\.env\.([a-zA-Z0-9_]+)", content):
+        metadata["envs"].append(m.group(1))
+
+    # Deduplicate lists
+    for key in metadata:
+        metadata[key] = sorted(list(set(metadata[key])))
+
+    return metadata
 
 logger = logging.getLogger("devpilot.projects")
 
@@ -167,15 +257,32 @@ def import_github_repository_bg(project_id: uuid.UUID, repo_url: str):
                             size = file_path.stat().st_size
                             lines = len(content.splitlines())
 
+                            intel_meta = extract_intelligence_metadata(content, file_path.name)
+                            intel_meta_json = json.dumps(intel_meta)
+
                             db_file = ProjectFile(
                                 project_id=project.id,
                                 file_path=rel_path,
                                 filename=file_path.name,
                                 size_bytes=size,
                                 content=content,
-                                language=ALLOWED_EXTENSIONS[ext]
+                                language=ALLOWED_EXTENSIONS[ext],
+                                intelligence_metadata=intel_meta_json
                             )
                             db.add(db_file)
+                            db.flush()
+
+                            # Compute embeddings and add to project collection in ChromaDB
+                            embed_text = f"File: {rel_path}\nContent:\n{content[:10000]}"
+                            embeddings = ai_service.generate_embeddings([embed_text])
+                            if embeddings and len(embeddings) > 0:
+                                collection = chroma_client.get_or_create_collection(name=f"project_{project.id}")
+                                collection.add(
+                                    ids=[str(db_file.id)],
+                                    embeddings=[embeddings[0]],
+                                    documents=[embed_text],
+                                    metadatas=[{"file_path": rel_path, "filename": file_path.name}]
+                                )
 
                             total_files += 1
                             total_lines += lines

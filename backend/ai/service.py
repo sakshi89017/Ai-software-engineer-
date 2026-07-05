@@ -158,6 +158,25 @@ class AIService:
             logger.warning("Title generation failed, using fallback: %s", e)
             return fallback_title_from_message(first_message)
 
+    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """
+        Generates text embeddings using the Gemini models.embed_content API.
+        """
+        if not self._has_key:
+            return [[0.0] * 768 for _ in texts]
+        try:
+            response = self._client.models.embed_content(
+                model="text-embedding-004",
+                contents=texts,
+            )
+            if isinstance(response.embeddings, list):
+                return [e.values for e in response.embeddings]
+            else:
+                return [response.embeddings.values]
+        except Exception as e:
+            logger.error("Failed to generate embeddings: %s", e)
+            return [[0.0] * 768 for _ in texts]
+
 
 # Singleton instance used by the router (stateless aside from the Gemini client).
 ai_service = AIService()

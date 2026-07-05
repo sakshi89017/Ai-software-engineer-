@@ -55,7 +55,13 @@ export function useChat({ chatId }: UseChatOptions) {
   );
 
   const runStream = useCallback(
-    async (targetChatId: string | null, content: string, regenerate: boolean, fileId?: string | null) => {
+    async (
+      targetChatId: string | null,
+      content: string,
+      regenerate: boolean,
+      fileId?: string | null,
+      projectId?: string | null
+    ) => {
       setIsStreaming(true);
       setStreamingContent("");
       const controller = new AbortController();
@@ -66,7 +72,13 @@ export function useChat({ chatId }: UseChatOptions) {
 
       try {
         await chatService.streamMessage(
-          { chat_id: targetChatId, content, regenerate, file_id: fileId || null },
+          {
+            chat_id: targetChatId,
+            content,
+            regenerate,
+            file_id: fileId || null,
+            project_id: projectId || null,
+          },
           (event: ChatStreamEvent) => {
             switch (event.type) {
               case "chat_created":
@@ -121,12 +133,12 @@ export function useChat({ chatId }: UseChatOptions) {
   );
 
   const sendMessage = useCallback(
-    async (content: string, fileId?: string | null) => {
+    async (content: string, fileId?: string | null, projectId?: string | null) => {
       const trimmed = content.trim();
       if (!trimmed || isStreaming) return;
 
       setMessages((prev) => [...prev, makeTempMessage("user", trimmed)]);
-      await runStream(chatId, trimmed, false, fileId);
+      await runStream(chatId, trimmed, false, fileId, projectId);
     },
     [chatId, isStreaming, runStream, makeTempMessage]
   );
