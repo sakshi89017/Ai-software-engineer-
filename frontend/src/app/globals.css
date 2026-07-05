@@ -132,10 +132,34 @@
   border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
 }
 
+.glass-panel-interactive {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel-interactive::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(350px circle at var(--x, 0px) var(--y, 0px), rgba(99, 102, 241, 0.09), transparent 80%);
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+  opacity: 0;
+}
+
+.glass-panel-interactive:hover::before {
+  opacity: 1;
+}
+
 .glass-panel-interactive:hover {
   background: color-mix(in srgb, var(--card) 85%, transparent);
   border-color: color-mix(in srgb, var(--primary) 35%, transparent);
-  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.12), 0 0 24px 1px rgba(99, 102, 241, 0.06);
+  box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.15), 0 0 24px 1px rgba(99, 102, 241, 0.08);
   transform: translateY(-2px);
 }
 

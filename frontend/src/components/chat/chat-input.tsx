@@ -205,13 +205,25 @@ export function ChatInput({
           </div>
         )}
         <div className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 shadow-sm">
+          {isListening && (
+            <div className="flex items-center gap-1 px-3 self-center select-none border-r border-border shrink-0 pr-4 h-6">
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-ping shrink-0" />
+              <div className="flex items-end gap-0.5 h-3">
+                <div className="h-1.5 w-0.5 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: "0ms", animationDuration: "0.8s" }} />
+                <div className="h-3 w-0.5 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: "150ms", animationDuration: "0.8s" }} />
+                <div className="h-2 w-0.5 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: "300ms", animationDuration: "0.8s" }} />
+              </div>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             placeholder={
-              attachedFile
+              isListening
+                ? "Listening... speak now..."
+                : attachedFile
                 ? `Ask about ${attachedFile.name}, or use a quick action above...`
                 : "Ask about code, debugging, architecture..."
             }
