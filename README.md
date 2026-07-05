@@ -53,3 +53,31 @@ Access the dashboard at **http://localhost:3000**.
    npm install
    npm run dev
    ```
+
+---
+
+## 📁 Code Upload & AI Analysis Module
+
+The application enables developers to upload codebases and individual source files to perform detailed, context-aware AI analyses.
+
+### 📊 Database Schema (UploadedFiles)
+*   `id` (UUID): Primary key.
+*   `user_id` (UUID): Foreign key referencing the authenticated user.
+*   `filename` (VARCHAR): Safe name of the uploaded source file.
+*   `language` (VARCHAR): Detected programming language of the file.
+*   `size` (INTEGER): File size in bytes.
+*   `path` (VARCHAR): Safe local file storage path.
+*   `created_at` (TIMESTAMP): Upload timestamp.
+
+### 🌐 REST API Specifications
+*   `POST /api/uploads`: Upload a source file (multipart/form-data).
+*   `GET /api/uploads`: List all uploads for the current authenticated user.
+*   `GET /api/uploads/{id}`: Fetch file metadata and complete text content.
+*   `DELETE /api/uploads/{id}`: Delete metadata and cleanup disk files.
+*   `POST /api/uploads/{id}/analyze`: Streams code review, bug diagnostics, or unit test generation chunks via Server-Sent Events (SSE).
+
+### 🔒 Security Implementations
+*   **JWT Protection**: All file interactions are gated behind user authentication; users can only see or access their own uploads.
+*   **Extension Validation**: Restricts uploads strictly to standard source text extensions (Python, JS, TS, Go, Rust, Java, C/C++, HTML, CSS, SQL, JSON, YAML, Markdown, TXT).
+*   **Size Constraint**: Enforces a strict maximum limit of `20 MB` per file.
+*   **Traversal Prevention**: Sanitizes file paths to prevent directory traversal vulnerabilities during local storage.

@@ -3,11 +3,17 @@ import { tokenStorage } from "@/lib/token-storage";
 import type { UploadedFile, UploadedFileWithContent } from "@/types/file";
 
 export const fileService = {
-  async upload(file: File): Promise<UploadedFile> {
+  async upload(file: File, onProgress?: (percent: number) => void): Promise<UploadedFile> {
     const formData = new FormData();
     formData.append("upload", file);
     const { data } = await apiClient.post<UploadedFile>("/api/uploads", formData, {
       headers: { "Content-Type": undefined },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
     });
     return data;
   },

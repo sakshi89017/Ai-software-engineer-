@@ -62,7 +62,7 @@ export function FileDropzone({ onFilesSelected, isUploading, acceptedExtensions 
         {isUploading ? "Uploading..." : "Drag and drop files here, or click to browse"}
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Supports {acceptedExtensions.join(", ")} — up to 2MB per file
+        Supports {acceptedExtensions.join(", ")} — up to 20MB per file
       </p>
     </div>
   );

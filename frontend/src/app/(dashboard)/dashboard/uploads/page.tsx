@@ -26,6 +26,8 @@ import { fileService } from "@/services/file-service";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/utils";
 import { MarkdownMessage } from "@/components/chat/markdown-message";
+import { cn } from "@/lib/utils";
+import { extractApiErrorMessage } from "@/lib/api-client";
 import type { UploadedFile } from "@/types/file";
 
 const ANALYSIS_ACTIONS = [
@@ -41,11 +43,15 @@ const ANALYSIS_ACTIONS = [
 
 export default function UploadsPage() {
   const router = useRouter();
-  const { files, isLoading, isUploading, uploadFile, deleteFile, SUPPORTED_EXTENSIONS } = useFiles();
+  const { files, isLoading, refresh, deleteFile, SUPPORTED_EXTENSIONS } = useFiles();
 
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   const [previewContent, setPreviewContent] = useState<string>("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Upload progress tracking state
+  const [uploadingFiles, setUploadingFiles] = useState<{ id: string; name: string; progress: number }[]>([]);
 
   // AI analysis states
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(true);
@@ -56,11 +62,38 @@ export default function UploadsPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedAnalysis, setCopiedAnalysis] = useState(false);
 
-  const handleFilesSelected = (selected: File[]) => {
-    selected.reduce(
-      (promise, file) => promise.then(() => uploadFile(file)),
-      Promise.resolve()
-    );
+  const handleFilesSelected = async (selected: File[]) => {
+    // Validate file extensions
+    const invalidFiles = selected.filter((file) => {
+      const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      return !SUPPORTED_EXTENSIONS.includes(ext);
+    });
+
+    if (invalidFiles.length > 0) {
+      toast.error(`Unsupported files: ${invalidFiles.map((f) => f.name).join(", ")}`);
+      return;
+    }
+
+    // Process uploads sequentially so they stream progress accurately
+    for (const file of selected) {
+      const uploadId = Math.random().toString(36).slice(2);
+      setUploadingFiles((prev) => [...prev, { id: uploadId, name: file.name, progress: 0 }]);
+
+      try {
+        await fileService.upload(file, (percent) => {
+          setUploadingFiles((prev) =>
+            prev.map((item) => (item.id === uploadId ? { ...item, progress: percent } : item))
+          );
+        });
+        toast.success(`${file.name} uploaded successfully!`);
+      } catch (error) {
+        toast.error(`Failed to upload ${file.name}: ${extractApiErrorMessage(error)}`);
+      } finally {
+        setUploadingFiles((prev) => prev.filter((item) => item.id !== uploadId));
+      }
+    }
+
+    refresh();
   };
 
   const handlePreview = async (file: UploadedFile) => {
@@ -68,6 +101,7 @@ export default function UploadsPage() {
     setIsPreviewLoading(true);
     setPreviewContent("");
     setAnalysisText("");
+    setSearchQuery("");
     setCurrentAction(null);
     try {
       const data = await fileService.getWithContent(file.id);
@@ -122,7 +156,25 @@ export default function UploadsPage() {
     }
   };
 
+  const highlightMatch = (text: string, query: string) => {
+    if (!query) return text;
+    const parts = text.split(new RegExp(`(${query})`, "gi"));
+    return parts.map((part, idx) =>
+      part.toLowerCase() === query.toLowerCase() ? (
+        <mark
+          key={idx}
+          className="bg-yellow-500/30 text-yellow-900 dark:text-yellow-100 px-0.5 rounded border border-yellow-500/40 font-semibold"
+        >
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
   const codeLines = previewContent.split("\n");
+  const isCurrentlyUploading = uploadingFiles.length > 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -135,9 +187,34 @@ export default function UploadsPage() {
 
       <FileDropzone
         onFilesSelected={handleFilesSelected}
-        isUploading={isUploading}
+        isUploading={isCurrentlyUploading}
         acceptedExtensions={SUPPORTED_EXTENSIONS}
       />
+
+      {/* Active Uploads Queue */}
+      {isCurrentlyUploading && (
+        <div className="space-y-3 rounded-lg border border-border bg-muted/10 p-4">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Uploading Files...
+          </h3>
+          <div className="space-y-2">
+            {uploadingFiles.map((file) => (
+              <div key={file.id} className="space-y-1">
+                <div className="flex justify-between text-xs font-medium">
+                  <span className="truncate max-w-[80%]">{file.name}</span>
+                  <span>{file.progress}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${file.progress}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Your files (Click to preview)</h2>
@@ -202,12 +279,24 @@ export default function UploadsPage() {
               
               {/* Left Panel: Code Viewer */}
               <div className="flex flex-1 flex-col p-6 overflow-hidden min-w-0 border-r border-border">
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="text-sm font-semibold text-muted-foreground">Source Code</h4>
+                <div className="flex justify-between items-center mb-3 gap-4 shrink-0">
+                  <h4 className="text-sm font-semibold text-muted-foreground shrink-0">Source Code</h4>
+                  
+                  {/* Search inside File */}
+                  <div className="flex items-center gap-2 flex-1 max-w-xs">
+                    <input
+                      type="text"
+                      placeholder="Search code..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                  </div>
+
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 gap-1.5"
+                    className="h-8 gap-1.5 shrink-0"
                     onClick={handleCopyCode}
                     disabled={isPreviewLoading || !previewContent}
                   >
@@ -232,7 +321,16 @@ export default function UploadsPage() {
                       {/* Code Content */}
                       <div className="py-4 pl-4 pr-6 select-text overflow-x-auto w-full text-foreground/90 text-xs leading-6 whitespace-pre min-w-0">
                         {codeLines.map((line, i) => (
-                          <div key={i}>{line || " "}</div>
+                          <div
+                            key={i}
+                            className={cn(
+                              searchQuery && line.toLowerCase().includes(searchQuery.toLowerCase())
+                                ? "bg-yellow-500/10 -mx-4 px-4 border-l-2 border-yellow-500"
+                                : ""
+                            )}
+                          >
+                            {highlightMatch(line, searchQuery) || " "}
+                          </div>
                         ))}
                       </div>
                     </>
