@@ -1,29 +1,24 @@
 """
-AIService: the single point of contact with OpenAI. Routers never call the
-OpenAI SDK directly — they call this service, so provider-specific quirks
-(streaming event shapes, error types) stay isolated here.
+AIService: the single point of contact with Google Gemini. Routers never call the
+SDK directly — they call this service, so provider-specific quirks
+stay isolated.
 """
 import os
 import logging
 import asyncio
 from typing import AsyncGenerator, Optional
 
-from openai import (
-    AsyncOpenAI,
-    APITimeoutError,
-    RateLimitError,
-    AuthenticationError,
-    APIConnectionError,
-    APIError,
-)
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 
 from ai.prompts import SYSTEM_PROMPT, build_title_generation_prompt
 from ai.utils import fallback_title_from_message, sanitize_title
 
 logger = logging.getLogger("devpilot.ai")
 
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-TITLE_MODEL = os.getenv("OPENAI_TITLE_MODEL", "gpt-4o-mini")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+TITLE_MODEL = os.getenv("GEMINI_TITLE_MODEL", "gemini-2.5-flash")
 
 
 class AIServiceError(Exception):
@@ -36,79 +31,91 @@ class AIServiceError(Exception):
 
 
 class AIService:
-    """Reusable service wrapping the OpenAI Responses API."""
+    """Reusable service wrapping the Google Gen AI API."""
 
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         # Client is constructed even without a key so the app can boot; the
-        # first real call will raise AuthenticationError, which we translate
+        # first real call will raise APIError, which we translate
         # into a clean AIServiceError instead of a raw 500.
-        self._client = AsyncOpenAI(api_key=api_key or "missing-key")
+        self._client = genai.Client(api_key=api_key or "missing-key")
         self._has_key = bool(api_key)
 
     def _build_input(self, history: list[dict], new_message: str) -> list[dict]:
-        """Builds the Responses API `input` array: system + prior turns + new turn."""
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        """Builds the Gemini chat content list (role user/model)."""
+        contents = []
         for m in history:
-            messages.append({"role": m["role"], "content": m["content"]})
-        messages.append({"role": "user", "content": new_message})
-        return messages
+            role = "model" if m["role"] == "assistant" else "user"
+            contents.append({
+                "role": role,
+                "parts": [{"text": m["content"]}]
+            })
+        contents.append({
+            "role": "user",
+            "parts": [{"text": new_message}]
+        })
+        return contents
 
     async def stream_reply(
         self, history: list[dict], new_message: str
     ) -> AsyncGenerator[str, None]:
         """
-        Streams the assistant's reply token-by-token using the Chat Completions API.
-        Yields plain text deltas. Raises AIServiceError on any failure so the
-        router can surface a clean error to the client mid-stream.
+        Streams the assistant's reply token-by-token using the Gemini API.
+        Yields plain text deltas. Raises AIServiceError on any failure.
         """
         if not self._has_key:
             raise AIServiceError(
-                "The AI service is not configured (missing OPENAI_API_KEY).", 503
+                "The AI service is not configured (missing GEMINI_API_KEY).", 503
             )
 
         max_retries = 3
         backoff = 0.5
         stream = None
+        contents = self._build_input(history, new_message)
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+        )
 
         for attempt in range(max_retries):
             try:
-                stream = await self._client.chat.completions.create(
+                stream = await self._client.aio.models.generate_content_stream(
                     model=DEFAULT_MODEL,
-                    messages=self._build_input(history, new_message),
-                    stream=True,
+                    contents=contents,
+                    config=config,
                 )
                 break
-            except (APIConnectionError, APITimeoutError) as e:
-                if attempt == max_retries - 1:
-                    logger.error("OpenAI connection/timeout after %d attempts: %s", max_retries, e)
-                    raise
-                logger.warning("OpenAI connection failed, retrying in %fs... (Attempt %d/%d)", backoff, attempt + 1, max_retries)
-                await asyncio.sleep(backoff)
-                backoff *= 2
+            except Exception as e:
+                status_code = getattr(e, 'code', None)
+                is_transient = (status_code is not None and status_code >= 500) or "timeout" in str(e).lower() or "connection" in str(e).lower()
+                if is_transient and attempt < max_retries - 1:
+                    logger.warning("Gemini connection failed, retrying in %fs... (Attempt %d/%d)", backoff, attempt + 1, max_retries)
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                else:
+                    logger.error("Gemini stream connection failed after attempts: %s", e)
+                    if isinstance(e, APIError):
+                        raise
+                    raise AIServiceError("Could not connect to the AI provider.", 502) from e
 
         try:
             async for chunk in stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        yield delta
+                if chunk.text:
+                    yield chunk.text
 
-        except AuthenticationError as e:
-            logger.error("OpenAI authentication error: %s", e)
-            raise AIServiceError("Invalid or missing OpenAI API key.", 401)
-        except RateLimitError as e:
-            logger.error("OpenAI rate limit error: %s", e)
-            raise AIServiceError("Rate limit exceeded. Please try again shortly.", 429)
-        except APITimeoutError as e:
-            logger.error("OpenAI timeout: %s", e)
-            raise AIServiceError("The AI provider timed out. Please try again.", 504)
-        except APIConnectionError as e:
-            logger.error("OpenAI connection error: %s", e)
-            raise AIServiceError("Could not reach the AI provider. Please try again.", 502)
         except APIError as e:
-            logger.error("OpenAI API error: %s", e)
-            raise AIServiceError("The AI provider returned an error.", 502)
+            logger.error("Gemini API error: %s", e)
+            status_code = getattr(e, 'code', 502)
+            if status_code in (400, 401, 403):
+                raise AIServiceError("Invalid or missing Gemini API key.", 401)
+            elif status_code == 429:
+                raise AIServiceError("Rate limit exceeded or quota exhausted. Please try again shortly.", 429)
+            elif status_code >= 500:
+                raise AIServiceError("The AI provider is currently unavailable. Please try again.", 503)
+            else:
+                raise AIServiceError(f"Gemini API error: {e.message}", 502)
+        except Exception as e:
+            logger.error("Unexpected error in Gemini service: %s", e)
+            raise AIServiceError("An unexpected error occurred while communicating with Gemini.", 502)
 
     async def generate_title(self, first_message: str) -> str:
         """
@@ -125,32 +132,32 @@ class AIService:
 
         for attempt in range(max_retries):
             try:
-                response = await self._client.chat.completions.create(
+                response = await self._client.aio.models.generate_content(
                     model=TITLE_MODEL,
-                    messages=[
-                        {"role": "system", "content": "You generate short chat titles only."},
-                        {"role": "user", "content": build_title_generation_prompt(first_message)},
-                    ],
-                    stream=False,
+                    contents=build_title_generation_prompt(first_message),
+                    config=types.GenerateContentConfig(
+                        system_instruction="You generate short chat titles only.",
+                        max_output_tokens=20,
+                    ),
                 )
                 break
-            except (APIConnectionError, APITimeoutError) as e:
-                if attempt == max_retries - 1:
-                    logger.warning("Title generation failed connection/timeout after max attempts: %s", e)
-                    return fallback_title_from_message(first_message)
-                await asyncio.sleep(backoff)
-                backoff *= 2
             except Exception as e:
-                logger.warning("Unexpected error during title generation attempt: %s", e)
-                return fallback_title_from_message(first_message)
+                status_code = getattr(e, 'code', None)
+                is_transient = (status_code is not None and status_code >= 500) or "timeout" in str(e).lower() or "connection" in str(e).lower()
+                if is_transient and attempt < max_retries - 1:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                else:
+                    logger.warning("Title generation failed, using fallback: %s", e)
+                    return fallback_title_from_message(first_message)
 
         try:
-            raw_title = response.choices[0].message.content or ""
+            raw_title = response.text or ""
             return sanitize_title(raw_title) if raw_title.strip() else fallback_title_from_message(first_message)
         except Exception as e:  # noqa: BLE001 - title generation must never crash chat creation
             logger.warning("Title generation failed, using fallback: %s", e)
             return fallback_title_from_message(first_message)
 
 
-# Singleton instance used by the router (stateless aside from the OpenAI client).
+# Singleton instance used by the router (stateless aside from the Gemini client).
 ai_service = AIService()
