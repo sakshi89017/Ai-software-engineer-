@@ -10,6 +10,7 @@ import models  # noqa: F401 - ensures models are registered on Base before creat
 from api.auth_routes import router as auth_router
 from ai.router import router as chat_router
 from files.router import router as files_router
+from projects.router import router as projects_router
 
 app = FastAPI(
     title="The AI Software Engineer API",
@@ -39,3 +40,5 @@ app.include_router(chat_router)
 app.include_router(files_router, prefix="/uploads")
 app.include_router(files_router, prefix="/api/uploads")
 app.include_router(files_router, prefix="/api/files")
+app.include_router(projects_router)
+app.include_router(projects_router, prefix="/api")
