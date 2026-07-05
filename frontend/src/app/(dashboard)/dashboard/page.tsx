@@ -96,7 +96,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         
         {/* Projects / Repositories */}
-        <div className="bg-card border border-border p-4 rounded-xl flex items-start gap-4 hover:border-primary/20 transition-all shadow-sm">
+        <div className="glass-panel glass-panel-interactive p-4 rounded-2xl flex items-start gap-4 transition-all shadow-sm">
           <div className="bg-blue-500/10 p-2.5 rounded-lg text-blue-500">
             <FolderDot className="h-5 w-5" />
           </div>
@@ -110,7 +110,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Uploaded Files */}
-        <div className="bg-card border border-border p-4 rounded-xl flex items-start gap-4 hover:border-primary/20 transition-all shadow-sm">
+        <div className="glass-panel glass-panel-interactive p-4 rounded-2xl flex items-start gap-4 transition-all shadow-sm">
           <div className="bg-amber-500/10 p-2.5 rounded-lg text-amber-500">
             <FolderUp className="h-5 w-5" />
           </div>
@@ -124,7 +124,7 @@ export default function DashboardPage() {
         </div>
 
         {/* AI Chats */}
-        <div className="bg-card border border-border p-4 rounded-xl flex items-start gap-4 hover:border-primary/20 transition-all shadow-sm">
+        <div className="glass-panel glass-panel-interactive p-4 rounded-2xl flex items-start gap-4 transition-all shadow-sm">
           <div className="bg-emerald-500/10 p-2.5 rounded-lg text-emerald-500">
             <MessageSquare className="h-5 w-5" />
           </div>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Core Review Reports */}
-        <div className="bg-card border border-border p-4 rounded-xl flex items-start gap-4 hover:border-primary/20 transition-all shadow-sm">
+        <div className="glass-panel glass-panel-interactive p-4 rounded-2xl flex items-start gap-4 transition-all shadow-sm">
           <div className="bg-purple-500/10 p-2.5 rounded-lg text-purple-500">
             <ShieldCheck className="h-5 w-5" />
           </div>
@@ -156,7 +156,7 @@ export default function DashboardPage() {
       {/* Grid: Secondary Module Stats */}
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Documentation Generated */}
-        <div className="bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm">
+        <div className="glass-panel glass-panel-interactive p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <div className="bg-indigo-500/10 p-2 rounded-lg text-indigo-500">
               <Bookmark className="h-4.5 w-4.5" />
@@ -170,7 +170,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Tests Generated */}
-        <div className="bg-card border border-border p-4 rounded-xl flex items-center justify-between shadow-sm">
+        <div className="glass-panel glass-panel-interactive p-4 rounded-2xl flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <div className="bg-pink-500/10 p-2 rounded-lg text-pink-500">
               <FileCode2 className="h-4.5 w-4.5" />
