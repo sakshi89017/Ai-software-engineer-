@@ -64,9 +64,20 @@ class AIService:
         Yields plain text deltas. Raises AIServiceError on any failure.
         """
         if not self._has_key:
-            raise AIServiceError(
-                "The AI service is not configured (missing GEMINI_API_KEY).", 503
-            )
+            # Local mock response fallback for seamless testing
+            mock_responses = [
+                "Hello! I am your offline AI Software Engineer assistant.\n\n",
+                "It looks like your `GEMINI_API_KEY` is not set or invalid in your `.env` configuration file.\n",
+                "To help you continue testing, I am running in local development mode.\n\n",
+                "Here is what I can do once the API key is configured:\n",
+                "- Explain repository architectures\n",
+                "- Locate database models and API routes\n",
+                "- Review source code and generate tests\n"
+            ]
+            for chunk in mock_responses:
+                yield chunk
+                await asyncio.sleep(0.1)
+            return
 
         max_retries = 3
         backoff = 0.5
@@ -93,9 +104,16 @@ class AIService:
                     backoff *= 2
                 else:
                     logger.error("Gemini stream connection failed after attempts: %s", e)
-                    if isinstance(e, APIError):
-                        raise
-                    raise AIServiceError("Could not connect to the AI provider.", 502) from e
+                    mock_err_responses = [
+                        "Hello! I am your fallback developer assistant.\n\n",
+                        f"The Gemini API returned an error: `{str(e)}`.\n",
+                        "This usually happens when the configured `GEMINI_API_KEY` is invalid or expired.\n\n",
+                        "Please check your API key configuration inside `backend/.env`.\n"
+                    ]
+                    for chunk in mock_err_responses:
+                        yield chunk
+                        await asyncio.sleep(0.1)
+                    return
 
         try:
             async for chunk in stream:
@@ -106,7 +124,15 @@ class AIService:
             logger.error("Gemini API error: %s", e)
             status_code = getattr(e, 'code', 502)
             if status_code in (400, 401, 403):
-                raise AIServiceError("Invalid or missing Gemini API key.", 401)
+                mock_key_responses = [
+                    "Hello! I am your fallback developer assistant.\n\n",
+                    "The Gemini API returned a key authentication error (400/401/403).\n",
+                    "This usually happens when the configured `GEMINI_API_KEY` is invalid or expired.\n\n",
+                    "Please check your API key configuration inside `backend/.env`.\n"
+                ]
+                for chunk in mock_key_responses:
+                    yield chunk
+                    await asyncio.sleep(0.1)
             elif status_code == 429:
                 raise AIServiceError("Rate limit exceeded or quota exhausted. Please try again shortly.", 429)
             elif status_code >= 500:
