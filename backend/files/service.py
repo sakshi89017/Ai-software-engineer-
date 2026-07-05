@@ -23,18 +23,24 @@ ALLOWED_EXTENSIONS: dict[str, str] = {
     ".tsx": "typescript",
     ".jsx": "javascript",
     ".java": "java",
+    ".c": "c",
     ".cpp": "cpp",
     ".cc": "cpp",
     ".h": "cpp",
     ".hpp": "cpp",
+    ".go": "go",
+    ".rs": "rust",
     ".html": "html",
     ".css": "css",
+    ".sql": "sql",
     ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
     ".md": "markdown",
     ".txt": "text",
 }
 
-MAX_FILE_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(2 * 1024 * 1024)))  # 2 MB default
+MAX_FILE_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(20 * 1024 * 1024)))  # 20 MB default
 UPLOAD_ROOT = Path(os.getenv("UPLOAD_ROOT", "uploads/storage")).resolve()
 
 

@@ -36,4 +36,6 @@ def health_check():
 
 app.include_router(auth_router)
 app.include_router(chat_router)
-app.include_router(files_router)
+app.include_router(files_router, prefix="/uploads")
+app.include_router(files_router, prefix="/api/uploads")
+app.include_router(files_router, prefix="/api/files")

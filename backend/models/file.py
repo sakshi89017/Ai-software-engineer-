@@ -18,3 +18,15 @@ class UploadedFile(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="files")
+
+    @property
+    def language(self) -> str:
+        return self.file_type
+
+    @property
+    def size(self) -> int:
+        return self.size_bytes
+
+    @property
+    def path(self) -> str:
+        return self.stored_path

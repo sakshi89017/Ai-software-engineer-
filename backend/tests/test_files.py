@@ -101,3 +101,62 @@ def test_file_crud_flow(mock_delete, mock_read, mock_save):
     # Verify 404 after delete
     response = client.get(f"/api/files/{file_id}", headers=headers)
     assert response.status_code == 404
+
+
+@patch("files.service.file_service.save_upload")
+@patch("files.service.file_service.read_content")
+@patch("ai.service.ai_service.stream_reply")
+def test_uploads_api_and_analysis(mock_stream, mock_read, mock_save):
+    """Verify uploads API endpoints and streaming AI analysis."""
+    headers = _get_auth_headers("uploaduser@example.com")
+
+    # Mock file_service and AI streaming behavior
+    mock_save.return_value = {
+        "filename": "code.py",
+        "stored_path": "uploads/storage/user_id/uuid_code.py",
+        "file_type": "py",
+        "size_bytes": 45
+    }
+    mock_read.return_value = "def add(a, b): return a + b"
+    
+    async def mock_generator(*args, **kwargs):
+        yield "This code adds two numbers."
+        yield " It is simple."
+    mock_stream.return_value = mock_generator()
+
+    # 1. Upload a file
+    file_payload = {"upload": ("code.py", b"def add(a, b): return a + b", "text/x-python")}
+    response = client.post("/api/uploads", files=file_payload, headers=headers)
+    assert response.status_code == 201
+    file_data = response.json()
+    assert file_data["filename"] == "code.py"
+    assert file_data["language"] == "py"
+    file_id = file_data["id"]
+
+    # 2. Get details (checking new fields: language, size, path, user_id)
+    response = client.get(f"/api/uploads/{file_id}", headers=headers)
+    assert response.status_code == 200
+    single_file = response.json()
+    assert single_file["id"] == file_id
+    assert single_file["language"] == "py"
+    assert "user_id" in single_file
+    assert "size" in single_file
+    assert "path" in single_file
+
+    # 3. List uploads
+    response = client.get("/api/uploads", headers=headers)
+    assert response.status_code == 200
+    assert len(response.json()) >= 1
+
+    # 4. Run AI Code Analysis (streaming)
+    response = client.post(
+        f"/api/uploads/{file_id}/analyze",
+        json={"action": "explain"},
+        headers=headers
+    )
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    
+    # 5. Delete file
+    response = client.delete(f"/api/uploads/{file_id}", headers=headers)
+    assert response.status_code == 204
