@@ -29,7 +29,7 @@ const resetPasswordSchema = z
 
 type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -140,5 +140,17 @@ export default function ResetPasswordPage() {
         )}
       </div>
     </GuestRoute>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <React.Suspense fallback={
+      <div className="flex justify-center py-8">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    }>
+      <ResetPasswordContent />
+    </React.Suspense>
   );
 }
