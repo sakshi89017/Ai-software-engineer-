@@ -52,3 +52,10 @@ def decode_token(token: str) -> Optional[dict]:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
+
+
+def create_reset_token(subject: str) -> str:
+    # Reset token expires in 15 minutes
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    payload = {"sub": subject, "exp": expire, "type": "reset"}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

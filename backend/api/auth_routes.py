@@ -14,6 +14,8 @@ from schemas.auth import (
     RefreshRequest,
     UserUpdate,
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 from auth.security import (
     hash_password,
@@ -21,6 +23,7 @@ from auth.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    create_reset_token,
 )
 from auth.dependencies import get_current_user
 
@@ -129,3 +132,35 @@ def change_password(
     current_user.hashed_password = hash_password(payload.new_password)
     db.commit()
     return {"message": "Password updated successfully"}
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Generates a temporary reset token and prints it to the logs (simulating mail delivery)."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    # Always return success message to prevent user enumeration
+    success_msg = {"message": "If this email is registered in our system, a password reset link has been printed to the server logs."}
+    
+    if user:
+        token = create_reset_token(str(user.id))
+        print(f"\n[SECURITY ALERT] PASSWORD RESET LINK FOR {user.email}:")
+        print(f"http://localhost:3000/reset-password?token={token}\n")
+        
+    return success_msg
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Decodes reset token and updates the user password."""
+    data = decode_token(payload.token)
+    if not data or data.get("type") != "reset":
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        
+    user_id = data.get("sub")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Password has been reset successfully. You can now log in."}
