@@ -8,7 +8,16 @@ from typing import Optional
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-this-in-production")
+import secrets
+import logging
+
+logger = logging.getLogger("devpilot.auth")
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == "change-this-in-production":
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning("No JWT_SECRET_KEY environment variable set! A secure random key has been dynamically generated for this application instance.")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))

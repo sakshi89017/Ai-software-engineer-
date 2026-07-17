@@ -577,7 +577,7 @@ export default function ProjectsPage() {
 
           {/* Navigation Tabs */}
           {selectedProject.status === "completed" && (
-            <div className="flex border-b border-border gap-2 select-none mb-2 shrink-0">
+            <div className="flex border-b border-border gap-2 select-none mb-2 shrink-0 overflow-x-auto whitespace-nowrap max-w-full pb-1 scrollbar-thin">
               <button
                 onClick={() => setActiveTab("files")}
                 className={cn(
@@ -650,10 +650,10 @@ export default function ProjectsPage() {
           {/* PROJECT WORKSPACE: SIDEBAR & CODE VIEWER */}
           {selectedProject.status === "completed" && (
             activeTab === "files" ? (
-              <div className="flex h-[60vh] gap-6 rounded-xl border border-border overflow-hidden bg-card">
+              <div className="flex flex-col md:flex-row h-auto min-h-[60vh] md:h-[60vh] gap-4 md:gap-6 rounded-xl border border-border overflow-hidden bg-card">
                 
                 {/* Left Side: Folder Directory Tree */}
-                <div className="w-80 border-r border-border flex flex-col min-h-0 bg-muted/5">
+                <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-border flex flex-col min-h-[300px] md:min-h-0 bg-muted/5 shrink-0">
                   <div className="p-4 border-b border-border bg-muted/15 flex items-center justify-between shrink-0">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Repository Files</h3>
                   </div>
@@ -676,18 +676,18 @@ export default function ProjectsPage() {
                 </div>
 
                 {/* Right Side: Code Viewer */}
-                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                <div className="flex-1 flex flex-col overflow-hidden min-h-[400px] md:min-h-0">
                   {activeFileId ? (
                     <div className="flex flex-1 flex-col overflow-hidden min-h-0">
                       
                       {/* Code Header */}
-                      <div className="px-6 py-4 border-b border-border bg-muted/10 flex items-center justify-between shrink-0">
+                      <div className="px-4 py-4 border-b border-border bg-muted/10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0">
                         <div>
                           <h4 className="font-semibold text-sm truncate max-w-lg">{activeFileName}</h4>
                           <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{activeFilePath}</p>
                         </div>
                         
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           {/* Search inside file */}
                           <div className="relative flex items-center max-w-xs">
                             <Search className="absolute left-2.5 h-3 w-3 text-muted-foreground" />

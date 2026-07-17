@@ -47,7 +47,7 @@ export function ChatSidebar() {
   };
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-card/50">
+    <aside className="flex w-full h-full flex-col">
       <div className="space-y-2 border-b border-border p-3">
         <Button className="w-full justify-start gap-2" onClick={() => router.push("/dashboard/chat")}>
           <MessageSquarePlus className="h-4 w-4" />
